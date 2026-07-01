@@ -116,39 +116,34 @@ export interface Order {
 
 // ===== Sellers Types =====
 export interface Seller {
-  id: string;
+  id: string | number;
   name: string;
   phone: string;
   email: string;
-  idNumber: string;
-  zones: string[];
-  registrationDate?: string;
-  status: 'active' | 'inactive' | 'pending';
+  citizen_id?: string;
+  address?: string;
+  current_stalls?: string[];
+  created_at?: string;
+  status: 'active' | 'inactive' | 'pending' | 'banned' | string;
+  document_status?: 'pending' | 'approved' | 'rejected' | 'request_more' | string;
+  document_image?: string | null;
+  document_url?: string | null;
   avatar?: string;
-  document?: {
-    url: string;
-    type: string;
-    thumbnail?: string;
-    fileName?: string;
-  };
 }
 
 export interface NewSellerApplication {
-  id: string;
+  id: string | number;
   name: string;
-  idNumber: string;
-  phone: string;
   email?: string;
+  phone: string;
+  citizen_id?: string;
   address?: string;
+  submission_date?: string;
+  document_status?: 'pending' | 'approved' | 'rejected' | 'request_more' | string;
+  document_image?: string | null;
+  document_url?: string | null;
+  status?: string;
   avatar?: string;
-  appliedDate: string;
-  status: 'pending' | 'approved' | 'rejected';
-  document?: {
-    url: string;
-    type: string;
-    thumbnail?: string;
-    fileName?: string;
-  };
 }
 
 // ===== Payments Types =====
@@ -179,6 +174,7 @@ export interface IssueReport {
   description: string;
   date: string;
   time: string;
+  rawDate?: string | null;
   status: 'pending' | 'progress' | 'resolved';
   image?: string;
   priority?: 'low' | 'medium' | 'high';
@@ -193,6 +189,7 @@ export interface Announcement {
   description: string;
   image?: string;
   date: string;
+  rawDate?: string | null;
   status: 'active' | 'inactive' | 'draft';
   category?: 'urgent' | 'event' | 'general' | 'news' | 'promotion' | 'update' | 'maintenance';
 }

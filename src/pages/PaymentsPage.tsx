@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Info, Save, Trash2, UploadCloud } from 'lucide-react';
+import { Info, Save, Trash2, UploadCloud, Eye, CheckCircle2, Clock, XCircle } from 'lucide-react';
 
 type PaymentSettingsResponse = {
   status: boolean;
@@ -17,6 +17,8 @@ const initialFormData = {
   accountNumber: '',
 };
 
+
+
 const PaymentsPage: React.FC = () => {
   const [formData, setFormData] = useState(initialFormData);
   const [selectedFileName, setSelectedFileName] = useState('');
@@ -30,7 +32,14 @@ const PaymentsPage: React.FC = () => {
 
   const qrCodeUrl = useMemo(() => {
     if (!qrCodePreview) return null;
-    return qrCodePreview.startsWith('http') ? qrCodePreview : `/storage/${qrCodePreview}`;
+    if (
+      qrCodePreview.startsWith('http') ||
+      qrCodePreview.startsWith('data:') ||
+      qrCodePreview.startsWith('/storage/')
+    ) {
+      return qrCodePreview;
+    }
+    return `/api/images/${qrCodePreview}`;
   }, [qrCodePreview]);
 
   const handleInputChange = (field: 'accountName' | 'accountNumber', value: string) => {
@@ -74,8 +83,23 @@ const PaymentsPage: React.FC = () => {
     }
   };
 
+  const [payments, setPayments] = useState<any[]>([]);
+  const [selectedSlip, setSelectedSlip] = useState<string | null>(null);
+
+  const loadPayments = async () => {
+    try {
+      const response = await fetch('/api/v1/payments');
+      if (!response.ok) throw new Error('Unable to load payments');
+      const payload = await response.json();
+      setPayments(payload.data || []);
+    } catch {
+      setPayments([]);
+    }
+  };
+
   useEffect(() => {
     void loadSettings();
+    void loadPayments();
   }, []);
 
   const handleSaveClick = () => {
@@ -110,7 +134,7 @@ const PaymentsPage: React.FC = () => {
       setErrorMessage('');
       setSelectedFileName('');
       setSelectedFile(null);
-      setQrCodePreview(payload.data?.qr_code_path ? `/storage/${payload.data.qr_code_path}` : null);
+      setQrCodePreview(payload.data?.qr_code_path ?? null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     } finally {
@@ -157,7 +181,7 @@ const PaymentsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-8">
+    <div className="space-y-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">การชำระเงิน</h1>
         <p className="mt-2 text-sm text-slate-600">ตั้งค่าระบบรับชำระเงินและ QR Code สำหรับลูกค้า</p>
@@ -299,7 +323,7 @@ const PaymentsPage: React.FC = () => {
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
                 onClick={() => setIsConfirmModalOpen(false)}
-                className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-55"
               >
                 ยกเลิก
               </button>
@@ -310,6 +334,115 @@ const PaymentsPage: React.FC = () => {
               >
                 {isSaving ? 'กำลังบันทึก...' : 'ยืนยัน'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment History Table */}
+      <div className="mt-8 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
+          <h2 className="text-lg font-bold text-slate-800">ประวัติการชำระเงินล่าสุด</h2>
+          <p className="mt-1 text-sm text-slate-500">ตรวจสอบและจัดการรายการชำระเงินที่เข้ามาในระบบ</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/50 text-sm font-semibold text-slate-600">
+                <th className="px-6 py-4">วันที่/เวลา</th>
+                <th className="px-6 py-4">ผู้ค้า / แผงค้า</th>
+                <th className="px-6 py-4">จำนวนเงิน</th>
+                <th className="px-6 py-4">ช่องทาง</th>
+                <th className="px-6 py-4">สถานะ</th>
+                <th className="px-6 py-4 text-center">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
+              {payments.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                    ไม่พบประวัติการชำระเงินในระบบ
+                  </td>
+                </tr>
+              ) : (
+                payments.map((txn) => {
+                  const paymentDateStr = txn.payment_date 
+                    ? new Date(txn.payment_date).toLocaleString('th-TH', { 
+                        year: 'numeric', month: '2-digit', day: '2-digit', 
+                        hour: '2-digit', minute: '2-digit' 
+                      })
+                    : '-';
+                  const tenantName = txn.booking?.user?.username || 'ไม่ระบุ';
+                  const stallNum = txn.booking?.stall?.stall_number || '-';
+                  return (
+                    <tr key={txn.payment_id} className="transition-colors hover:bg-slate-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
+                        {paymentDateStr}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-slate-800 font-bold">
+                        {tenantName} - ล็อก {stallNum}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-slate-800 font-mono font-bold">
+                        ฿{(txn.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-slate-600">
+                        {txn.payment_slip ? 'โอนเงิน (แนบสลิป)' : 'เงินสด'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {txn.status === 'verified' || txn.status === 'success' ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                            <CheckCircle2 size={14} /> สำเร็จ
+                          </span>
+                        ) : txn.status === 'rejected' ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-700">
+                            <XCircle size={14} /> ปฏิเสธ
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">
+                            <Clock size={14} /> รอตรวจสอบ
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <button 
+                          onClick={() => {
+                            if (txn.payment_slip) {
+                              const slipPath = txn.payment_slip.startsWith('http') || txn.payment_slip.startsWith('/storage') || txn.payment_slip.startsWith('data:') 
+                                ? txn.payment_slip 
+                                : `/storage/${txn.payment_slip}`;
+                              setSelectedSlip(slipPath);
+                            } else {
+                              alert('ไม่มีรูปภาพสลิปแนบมากับรายการนี้');
+                            }
+                          }}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-sky-500 transition-colors hover:bg-sky-55 hover:text-sky-700"
+                        >
+                          <Eye size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {selectedSlip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onClick={() => setSelectedSlip(null)}>
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-bold text-slate-900">หลักฐานการชำระเงิน (Slip)</h3>
+              <button 
+                onClick={() => setSelectedSlip(null)} 
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <span className="text-2xl font-normal">&times;</span>
+              </button>
+            </div>
+            <div className="mt-4 flex justify-center bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <img src={selectedSlip} alt="Payment Slip" className="max-h-[60vh] max-w-full rounded-lg object-contain shadow-sm" />
             </div>
           </div>
         </div>

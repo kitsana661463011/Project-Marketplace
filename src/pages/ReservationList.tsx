@@ -9,8 +9,6 @@ import {
   CheckCheck,
   ChevronDown,
   Clock3,
-  Edit3,
-  Eye,
   FileText,
   ImageOff,
   Inbox,
@@ -20,11 +18,11 @@ import {
   Plus,
   Receipt,
   Search,
-  Trash2,
   Wrench,
   XCircle,
 } from 'lucide-react';
 import type { Announcement, IssueReport } from '../types';
+import { ActionButton } from '../components/common';
 
 type ReservationStatus = 'pending' | 'approved' | 'rejected';
 
@@ -364,13 +362,11 @@ export const ReservationListPage: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <button
+                        <ActionButton
+                          type="view"
                           onClick={() => setSelectedReservation(item)}
-                          className="rounded-full bg-slate-100 p-2 text-slate-600 transition hover:bg-slate-200"
-                          aria-label="ดูรายละเอียด"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
+                          title="ดูรายละเอียด"
+                        />
                         <button
                           onClick={() => void handleStatusChange(item.id, 'approved')}
                           className="rounded-full bg-emerald-50 p-2 text-emerald-600 transition hover:bg-emerald-100"
@@ -508,12 +504,542 @@ export const ReservationListPage: React.FC = () => {
   );
 };
 
-export const StoreManagementPage: React.FC = () => (
-  <div className="space-y-6">
-    <PageHeader title="Store Management" description="Monitor marketplace stores and storefront activity." />
-    <SimplePageCard title="Store overview" description="Store management content will appear here." />
-  </div>
-);
+export const StoreManagementPage: React.FC = () => {
+  const [shops, setShops] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Modals state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [currentShop, setCurrentShop] = useState<any | null>(null);
+
+  // Form states
+  const [shopName, setShopName] = useState('');
+  const [description, setDescription] = useState('');
+  const [userId, setUserId] = useState('');
+  const [categoryId, setCategoryId] = useState('1');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const categories = [
+    { id: '1', name: 'อาหารและเครื่องดื่ม (Food)' },
+    { id: '2', name: 'เสื้อผ้าและแฟชั่น (Fashion)' },
+    { id: '3', name: 'ไอทีและอิเล็กทรอนิกส์ (IT/Electronics)' },
+    { id: '4', name: 'บริการและเบ็ดเตล็ด (Service)' },
+    { id: '5', name: 'อื่นๆ (Others)' }
+  ];
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [shopsRes, usersRes] = await Promise.all([
+        fetch('/api/v1/shops'),
+        fetch('/api/v1/users')
+      ]);
+
+      if (!shopsRes.ok || !usersRes.ok) {
+        throw new Error('ไม่สามารถเรียกดูข้อมูลร้านค้าหรือผู้ใช้จากเซิร์ฟเวอร์ได้');
+      }
+
+      const shopsPayload = await shopsRes.json();
+      const usersPayload = await usersRes.json();
+
+      setShops(Array.isArray(shopsPayload?.data) ? shopsPayload.data : []);
+      setUsers(Array.isArray(usersPayload?.data) ? usersPayload.data : []);
+    } catch (err: any) {
+      setError(err.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImagePreview(typeof reader.result === 'string' ? reader.result : null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shopName.trim() || !userId || !categoryId) {
+      alert('กรุณากรอกชื่อร้านค้าและเจ้าของร้าน');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const formData = new FormData();
+      formData.append('shop_name', shopName);
+      formData.append('description', description);
+      formData.append('user_id', userId);
+      formData.append('category_id', categoryId);
+      if (selectedFile) {
+        formData.append('shop_image', selectedFile);
+      }
+
+      const response = await fetch('/api/v1/shops', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.message || 'ไม่สามารถบันทึกข้อมูลได้');
+      }
+
+      setShowCreateModal(false);
+      resetForm();
+      loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentShop || !shopName.trim() || !userId || !categoryId) return;
+
+    try {
+      setIsSaving(true);
+      const formData = new FormData();
+      formData.append('shop_name', shopName);
+      formData.append('description', description);
+      formData.append('user_id', userId);
+      formData.append('category_id', categoryId);
+      formData.append('_method', 'PUT'); // Laravel form method spoofing for multipart PUT
+      if (selectedFile) {
+        formData.append('shop_image', selectedFile);
+      }
+
+      const response = await fetch(`/api/v1/shops/${currentShop.shop_id}`, {
+        method: 'POST', // Send as POST for multipart handling in PHP
+        body: formData,
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.message || 'ไม่สามารถแก้ไขข้อมูลได้');
+      }
+
+      setShowUpdateModal(false);
+      resetForm();
+      loadData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('ต้องการลบร้านค้านี้จริงหรือไม่? รูปภาพที่เกี่ยวข้องจะถูกลบออกถาวร')) return;
+
+    try {
+      const response = await fetch(`/api/v1/shops/${id}`, {
+        method: 'DELETE',
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.message || 'ลบข้อมูลร้านไม่สำเร็จ');
+      }
+      loadData();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const resetForm = () => {
+    setShopName('');
+    setDescription('');
+    setUserId('');
+    setCategoryId('1');
+    setSelectedFile(null);
+    setImagePreview(null);
+    setCurrentShop(null);
+  };
+
+  const openUpdateModal = (shop: any) => {
+    setCurrentShop(shop);
+    setShopName(shop.shop_name);
+    setDescription(shop.description || '');
+    setUserId(String(shop.user_id));
+    setCategoryId(String(shop.category_id));
+    setImagePreview(shop.shop_image ? getImageUrl(shop.shop_image) : null);
+    setShowUpdateModal(true);
+  };
+
+  const getImageUrl = (path: string | null) => {
+    if (!path) return '';
+    if (path.startsWith('/assets/')) {
+      return '/src' + path;
+    }
+    return `/api/images/${path}`;
+  };
+
+  const filteredShops = shops.filter((shop) =>
+    shop.shop_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (shop.owner?.username || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">การจัดการร้านค้า (Shops)</h1>
+          <p className="text-sm text-slate-500">จัดการข้อมูลแผงร้านค้าและอัปโหลดภาพประกอบ</p>
+        </div>
+        <button
+          onClick={() => {
+            resetForm();
+            if (users.length > 0) setUserId(String(users[0].user_id));
+            setShowCreateModal(true);
+          }}
+          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+        >
+          <Plus className="h-4 w-4" />
+          เพิ่มร้านค้าใหม่
+        </button>
+      </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 max-w-md">
+            <Search className="h-4 w-4" />
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="ค้นหาตามชื่อร้านหรือชื่อผู้เช่า..."
+              className="w-full border-none bg-transparent outline-none placeholder:text-slate-400"
+            />
+          </label>
+        </div>
+      </section>
+
+      {error && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-[900px] w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+              <tr>
+                <th className="px-6 py-4 text-left font-semibold">ร้านค้า</th>
+                <th className="px-6 py-4 text-left font-semibold">รายละเอียด</th>
+                <th className="px-6 py-4 text-left font-semibold">หมวดหมู่</th>
+                <th className="px-6 py-4 text-left font-semibold">ผู้ดูแลร้าน (Owner)</th>
+                <th className="px-6 py-4 text-center font-semibold">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                    กำลังโหลดข้อมูลร้านค้า...
+                  </td>
+                </tr>
+              ) : filteredShops.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                    ไม่พบข้อมูลร้านค้าในระบบ
+                  </td>
+                </tr>
+              ) : (
+                filteredShops.map((shop) => (
+                  <tr key={shop.shop_id} className="hover:bg-slate-50 transition">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-4">
+                        {shop.shop_image ? (
+                          <img
+                            src={getImageUrl(shop.shop_image)}
+                            alt={shop.shop_name}
+                            className="h-12 w-16 rounded-xl object-cover border border-slate-200"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=150&q=80';
+                            }}
+                          />
+                        ) : (
+                          <div className="flex h-12 w-16 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                            <ImageOff className="h-5 w-5" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-semibold text-slate-950">{shop.shop_name}</p>
+                          <p className="text-xs text-slate-500">ID: {shop.shop_id}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 max-w-xs truncate text-slate-600">
+                      {shop.description || '-'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                        {shop.category?.category_name || `หมวดหมู่ ID: ${shop.category_id}`}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-800">
+                          {shop.owner?.username || `User ID: ${shop.user_id}`}
+                        </span>
+                        {shop.owner?.email && (
+                          <span className="text-xs text-slate-400">({shop.owner.email})</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <ActionButton
+                          type="edit"
+                          onClick={() => openUpdateModal(shop)}
+                          title="แก้ไขข้อมูลร้าน"
+                        />
+                        <ActionButton
+                          type="delete"
+                          onClick={() => handleDelete(shop.shop_id)}
+                          title="ลบร้านค้า"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* CREATE MODAL */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+            <div className="bg-blue-600 px-6 py-4 text-white">
+              <h3 className="text-lg font-bold">เพิ่มร้านค้าใหม่</h3>
+            </div>
+            <form onSubmit={handleCreate} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">ชื่อร้านค้า *</label>
+                <input
+                  type="text"
+                  required
+                  value={shopName}
+                  onChange={(e) => setShopName(e.target.value)}
+                  placeholder="กรอกชื่อร้านค้า"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">หมวดหมู่ร้าน *</label>
+                  <select
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">ผู้เช่า / เจ้าของ *</label>
+                  <select
+                    value={userId}
+                    onChange={(e) => setUserId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
+                  >
+                    {users.map((u) => (
+                      <option key={u.user_id} value={u.user_id}>{u.username} ({u.role})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">รายละเอียดร้านค้า</label>
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="กรอกรายละเอียดแผงค้าและสินค้า..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">อัปโหลดภาพหน้าร้าน</label>
+                <div className="flex items-center gap-4">
+                  <label className="flex h-24 w-32 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-center hover:bg-slate-100 transition">
+                    <Camera className="h-6 w-6 text-slate-400" />
+                    <span className="text-xs text-slate-500 mt-1">เลือกรูปภาพ</span>
+                    <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                  </label>
+                  {imagePreview && (
+                    <div className="relative h-24 w-32 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                      <img src={imagePreview} alt="Preview" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedFile(null);
+                          setImagePreview(null);
+                        }}
+                        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white hover:bg-black/80 transition"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition"
+                >
+                  {isSaving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* UPDATE MODAL */}
+      {showUpdateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+            <div className="bg-blue-600 px-6 py-4 text-white">
+              <h3 className="text-lg font-bold">แก้ไขข้อมูลร้านค้า</h3>
+            </div>
+            <form onSubmit={handleUpdate} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">ชื่อร้านค้า *</label>
+                <input
+                  type="text"
+                  required
+                  value={shopName}
+                  onChange={(e) => setShopName(e.target.value)}
+                  placeholder="กรอกชื่อร้านค้า"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">หมวดหมู่ร้าน *</label>
+                  <select
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">ผู้เช่า / เจ้าของ *</label>
+                  <select
+                    value={userId}
+                    onChange={(e) => setUserId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
+                  >
+                    {users.map((u) => (
+                      <option key={u.user_id} value={u.user_id}>{u.username} ({u.role})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">รายละเอียดร้านค้า</label>
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="กรอกรายละเอียดแผงค้าและสินค้า..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">เปลี่ยนภาพหน้าร้าน</label>
+                <div className="flex items-center gap-4">
+                  <label className="flex h-24 w-32 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-center hover:bg-slate-100 transition">
+                    <Camera className="h-6 w-6 text-slate-400" />
+                    <span className="text-xs text-slate-500 mt-1">เลือกรูปภาพ</span>
+                    <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                  </label>
+                  {imagePreview && (
+                    <div className="relative h-24 w-32 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                      <img src={imagePreview} alt="Preview" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedFile(null);
+                          setImagePreview(null);
+                        }}
+                        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white hover:bg-black/80 transition"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowUpdateModal(false)}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition"
+                >
+                  {isSaving ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const SellerManagementPage: React.FC = () => (
   <div className="space-y-6">
@@ -534,6 +1060,8 @@ export const PaymentManagementPage: React.FC = () => (
 export const ReportsPage: React.FC = () => {
   const [reports, setReports] = useState<IssueReport[]>([]);
   const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [activeCategory, setActiveCategory] = useState<'all' | 'electric' | 'water' | 'structure' | 'clean' | 'feedback' | 'other'>('all');
   const [selectedReport, setSelectedReport] = useState<IssueReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -574,8 +1102,9 @@ export const ReportsPage: React.FC = () => {
           description: item.description || '-',
           date: item.report_date ? new Date(item.report_date).toLocaleDateString('th-TH') : '-',
           time: item.report_date ? new Date(item.report_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '-',
+          rawDate: item.report_date || null,
           status: item.status || 'pending',
-          image: item.image ? `/storage/${item.image}` : undefined,
+          image: item.image ? (item.image.startsWith('/storage/') || item.image.startsWith('/assets/') || item.image.startsWith('http') ? item.image : `/api/images/${item.image}`) : undefined,
           priority: 'medium',
           reporter: item.user_name || 'ไม่ระบุ',
           adminNote: item.admin_note || '',
@@ -599,7 +1128,31 @@ export const ReportsPage: React.FC = () => {
     }
   }, [selectedReport]);
 
-  const filteredReports = useMemo(() => reports, [reports]);
+  const filteredReports = useMemo(() => {
+    let filtered = [...reports];
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((item) => {
+        const itemDate = item.rawDate ? new Date(item.rawDate) : null;
+        return itemDate ? itemDate >= start : false;
+      });
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      filtered = filtered.filter((item) => {
+        const itemDate = item.rawDate ? new Date(item.rawDate) : null;
+        return itemDate ? itemDate <= end : false;
+      });
+    }
+    filtered.sort((a: any, b: any) => {
+      const timeA = a.rawDate ? new Date(a.rawDate).getTime() : 0;
+      const timeB = b.rawDate ? new Date(b.rawDate).getTime() : 0;
+      return timeB - timeA;
+    });
+    return filtered;
+  }, [reports, startDate, endDate]);
 
   const summary = useMemo(() => {
     const total = reports.length;
@@ -735,15 +1288,33 @@ export const ReportsPage: React.FC = () => {
             })}
           </div>
 
-          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500">
-            <Search className="h-4 w-4" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="ค้นหาเลขที่แผง หรือรหัสแจ้งซ่อม..."
-              className="w-full border-none bg-transparent outline-none placeholder:text-slate-400"
-            />
-          </label>
+          <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 w-full lg:w-auto">
+              <CalendarDays className="h-4 w-4 text-slate-400 shrink-0" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="border-none bg-transparent outline-none text-slate-700 w-full max-w-[130px] focus:ring-0 focus:outline-none"
+              />
+              <span className="text-slate-400 mx-1 text-xs shrink-0">ถึง</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="border-none bg-transparent outline-none text-slate-700 w-full max-w-[130px] focus:ring-0 focus:outline-none"
+              />
+            </div>
+            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500">
+              <Search className="h-4 w-4 shrink-0" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="ค้นหาเลขที่แผง หรือรหัส..."
+                className="w-full border-none bg-transparent outline-none placeholder:text-slate-400"
+              />
+            </label>
+          </div>
         </div>
       </div>
 
@@ -812,13 +1383,11 @@ export const ReportsPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <button
+                      <ActionButton
+                        type="view"
                         onClick={() => setSelectedReport(report)}
-                        className="rounded-full bg-slate-100 p-2 text-slate-600 transition hover:bg-sky-100 hover:text-sky-600"
-                        aria-label="ดูรายละเอียด"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
+                        title="ดูรายละเอียด"
+                      />
                     </td>
                   </tr>
                 );
@@ -928,6 +1497,8 @@ export const ReportsPage: React.FC = () => {
 export const AnnouncementsPage: React.FC = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [activeCategory, setActiveCategory] = useState<'all' | 'urgent' | 'event' | 'general'>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -973,13 +1544,18 @@ export const AnnouncementsPage: React.FC = () => {
           description: item.description || '',
           image: item.image || '',
           date: formatAnnouncementDate(item.publish_date),
+          rawDate: item.publish_date || null,
           status: item.status === 'active' ? 'active' : 'inactive',
           category: item.announcement_type === 'urgent' ? 'urgent' : item.announcement_type === 'activity' ? 'event' : 'general',
         }))
       );
     } catch {
-      setAnnouncements([]);
-      setError('ไม่สามารถโหลดประกาศได้ในขณะนี้');
+      setAnnouncements([
+        { id: 'mock-1', title: 'ประกาศหยุดจ่ายกระแสไฟฟ้า', description: 'การไฟฟ้าฯ จะงดจ่ายกระแสไฟฟ้าในวันที่ 15 กรกฎาคม ตั้งแต่เวลา 09.00-12.00 น. เพื่อซ่อมบำรุง', image: '', date: formatAnnouncementDate('2026-07-01T10:00:00Z'), rawDate: '2026-07-01T10:00:00Z', status: 'active', category: 'urgent' },
+        { id: 'mock-2', title: 'กิจกรรมตรวจสุขภาพประจำปีผู้ค้า', description: 'ขอเชิญผู้ค้าทุกท่านเข้ารับการตรวจสุขภาพประจำปี ในวันที่ 20 กรกฎาคม ณ บริเวณลานกิจกรรม', image: '', date: formatAnnouncementDate('2026-06-25T14:30:00Z'), rawDate: '2026-06-25T14:30:00Z', status: 'active', category: 'event' },
+        { id: 'mock-3', title: 'แจ้งปรับปรุงลานจอดรถโซน A', description: 'จะมีการเทคอนกรีตลานจอดรถโซน A เพิ่มเติม ขอความกรุณางดจอดรถในบริเวณดังกล่าวตั้งแต่วันที่ 1-5 สิงหาคม', image: '', date: formatAnnouncementDate('2026-06-20T09:15:00Z'), rawDate: '2026-06-20T09:15:00Z', status: 'active', category: 'general' },
+      ]);
+      setError('ไม่สามารถโหลดประกาศได้ในขณะนี้ ระบบกำลังแสดงข้อมูลตัวอย่าง');
     } finally {
       setLoading(false);
     }
@@ -990,7 +1566,7 @@ export const AnnouncementsPage: React.FC = () => {
   }, [search]);
 
   const filteredAnnouncements = useMemo(() => {
-    return announcements.filter((item) => {
+    let filtered = announcements.filter((item) => {
       const matchesCategory = activeCategory === 'all' || item.category === activeCategory;
       const matchesSearch = [item.title, item.description, item.date]
         .join(' ')
@@ -998,7 +1574,32 @@ export const AnnouncementsPage: React.FC = () => {
         .includes(search.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [activeCategory, announcements, search]);
+
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((item) => {
+        const itemDate = item.rawDate ? new Date(item.rawDate) : null;
+        return itemDate ? itemDate >= start : false;
+      });
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      filtered = filtered.filter((item) => {
+        const itemDate = item.rawDate ? new Date(item.rawDate) : null;
+        return itemDate ? itemDate <= end : false;
+      });
+    }
+
+    filtered.sort((a, b) => {
+      const timeA = a.rawDate ? new Date(a.rawDate).getTime() : 0;
+      const timeB = b.rawDate ? new Date(b.rawDate).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    return filtered;
+  }, [activeCategory, announcements, search, startDate, endDate]);
 
   const getCategoryMeta = (category?: Announcement['category']) => {
     switch (category) {
@@ -1188,31 +1789,50 @@ export const AnnouncementsPage: React.FC = () => {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <label className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500">
-            <Search className="h-4 w-4" />
+          <label className="flex flex-1 lg:flex-none lg:w-80 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500">
+            <Search className="h-4 w-4 shrink-0" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="ค้นหาหัวข้อประกาศ"
+              placeholder="ค้นหาหัวข้อประกาศ..."
               className="w-full border-none bg-transparent outline-none placeholder:text-slate-400"
             />
           </label>
 
-          <div className="flex flex-wrap gap-2">
-            {categoryOptions.map((option) => {
-              const isActive = activeCategory === option.value;
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => setActiveCategory(option.value)}
-                  className={`rounded-full px-3 py-2 text-sm font-medium transition ${
-                    isActive ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex flex-wrap gap-2">
+              {categoryOptions.map((option) => {
+                const isActive = activeCategory === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => setActiveCategory(option.value)}
+                    className={`rounded-full px-3 py-2 text-sm font-medium transition ${
+                      isActive ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 w-full sm:w-auto">
+              <CalendarDays className="h-4 w-4 text-slate-400 shrink-0" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="border-none bg-transparent outline-none text-slate-700 w-full max-w-[130px] focus:ring-0 focus:outline-none"
+              />
+              <span className="text-slate-400 mx-1 text-xs shrink-0">ถึง</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="border-none bg-transparent outline-none text-slate-700 w-full max-w-[130px] focus:ring-0 focus:outline-none"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -1282,15 +1902,21 @@ export const AnnouncementsPage: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => openPreviewModal(item)} className="rounded-full bg-slate-100 p-2 text-slate-600 transition hover:bg-sky-100 hover:text-sky-600" aria-label="ดูตัวอย่าง">
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => openEditModal(item)} className="rounded-full bg-slate-100 p-2 text-slate-600 transition hover:bg-amber-100 hover:text-amber-600" aria-label="แก้ไข">
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => handleDelete(item.id)} className="rounded-full bg-slate-100 p-2 text-slate-600 transition hover:bg-rose-100 hover:text-rose-600" aria-label="ลบ">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <ActionButton
+                          type="view"
+                          onClick={() => openPreviewModal(item)}
+                          title="ดูตัวอย่าง"
+                        />
+                        <ActionButton
+                          type="edit"
+                          onClick={() => openEditModal(item)}
+                          title="แก้ไข"
+                        />
+                        <ActionButton
+                          type="delete"
+                          onClick={() => handleDelete(item.id)}
+                          title="ลบ"
+                        />
                       </div>
                     </td>
                   </tr>

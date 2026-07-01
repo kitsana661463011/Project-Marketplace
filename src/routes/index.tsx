@@ -1,10 +1,11 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useMemo } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../components/layout';
 import { mockDashboardMetrics, mockNavItems, mockUser } from '../data/mockData';
+import { useBadgeCounts } from '../hooks';
 
 const DashboardPage = lazy(() => import('../pages/Dashboard').then((module) => ({ default: module.Dashboard })));
-const StoreManagementPage = lazy(() => import('../pages/ReservationList').then((module) => ({ default: module.StoreManagementPage })));
+const MarketMapPage = lazy(() => import('../pages/MarketMapPage'));
 const SellersPage = lazy(() => import('../pages/SellersPage').then((module) => ({ default: module.default })));
 const VerificationRequestsPage = lazy(() => import('../pages/ReservationList').then((module) => ({ default: module.VerificationRequestsPage })));
 const PaymentManagementPage = lazy(() => import('../pages/PaymentsPage').then((module) => ({ default: module.default })));
@@ -22,13 +23,13 @@ const navIdMap: Record<string, string> = {
 };
 
 const pageTitleMap: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/stores': 'Store Management',
-  '/sellers': 'Seller Management',
-  '/verifications': 'Verification Requests',
-  '/payments': 'Payment Management',
-  '/reports': 'Reports',
-  '/announcements': 'Announcements',
+  '/dashboard': 'ภาพรวมตลาด',
+  '/stores': 'จัดการแผนผังตลาด',
+  '/sellers': 'ข้อมูลผู้ค้า',
+  '/verifications': 'รายการจอง',
+  '/payments': 'การชำระเงิน',
+  '/reports': 'แจ้งเหตุ/ปัญหา',
+  '/announcements': 'จัดการประกาศ',
 };
 
 interface ShellProps {
@@ -39,10 +40,26 @@ interface ShellProps {
 const PageShell: React.FC<ShellProps> = ({ title, children }) => {
   const location = useLocation();
   const activeItemId = navIdMap[location.pathname] ?? 'dashboard';
+  const badgeCounts = useBadgeCounts();
+
+  // Merge live badge counts from the API into the static nav items
+  const navItemsWithBadges = useMemo(
+    () =>
+      mockNavItems.map((item) => {
+        if (item.id === 'verifications' && badgeCounts.verifications > 0) {
+          return { ...item, badge: badgeCounts.verifications };
+        }
+        if (item.id === 'reports' && badgeCounts.reports > 0) {
+          return { ...item, badge: badgeCounts.reports };
+        }
+        return item;
+      }),
+    [badgeCounts],
+  );
 
   return (
     <DashboardLayout
-      navItems={mockNavItems}
+      navItems={navItemsWithBadges}
       activeItemId={activeItemId}
       onNavigate={() => undefined}
       pageTitle={title}
@@ -71,13 +88,13 @@ export const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={renderWithShell('Dashboard', <Suspense fallback={<LoadingFallback />}><DashboardPage /></Suspense>)} />
-      <Route path="/stores" element={renderWithShell('Store Management', <Suspense fallback={<LoadingFallback />}><StoreManagementPage /></Suspense>)} />
-      <Route path="/sellers" element={renderWithShell('Seller Management', <Suspense fallback={<LoadingFallback />}><SellersPage /></Suspense>)} />
-      <Route path="/verifications" element={renderWithShell('Verification Requests', <Suspense fallback={<LoadingFallback />}><VerificationRequestsPage /></Suspense>)} />
-      <Route path="/payments" element={renderWithShell('Payment Management', <Suspense fallback={<LoadingFallback />}><PaymentManagementPage /></Suspense>)} />
-      <Route path="/reports" element={renderWithShell('Reports', <Suspense fallback={<LoadingFallback />}><ReportsPage /></Suspense>)} />
-      <Route path="/announcements" element={renderWithShell('Announcements', <Suspense fallback={<LoadingFallback />}><AnnouncementsPage /></Suspense>)} />
+      <Route path="/dashboard" element={renderWithShell('ภาพรวมตลาด', <Suspense fallback={<LoadingFallback />}><DashboardPage /></Suspense>)} />
+      <Route path="/stores" element={renderWithShell('จัดการแผนผังตลาด', <Suspense fallback={<LoadingFallback />}><MarketMapPage /></Suspense>)} />
+      <Route path="/sellers" element={renderWithShell('ข้อมูลผู้ค้า', <Suspense fallback={<LoadingFallback />}><SellersPage /></Suspense>)} />
+      <Route path="/verifications" element={renderWithShell('รายการจอง', <Suspense fallback={<LoadingFallback />}><VerificationRequestsPage /></Suspense>)} />
+      <Route path="/payments" element={renderWithShell('การชำระเงิน', <Suspense fallback={<LoadingFallback />}><PaymentManagementPage /></Suspense>)} />
+      <Route path="/reports" element={renderWithShell('แจ้งเหตุ/ปัญหา', <Suspense fallback={<LoadingFallback />}><ReportsPage /></Suspense>)} />
+      <Route path="/announcements" element={renderWithShell('จัดการประกาศ', <Suspense fallback={<LoadingFallback />}><AnnouncementsPage /></Suspense>)} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

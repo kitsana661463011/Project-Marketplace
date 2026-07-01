@@ -39,7 +39,7 @@ const OrdersPage: React.FC = () => {
   );
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="space-y-6">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">รายการสั่งซื้อ</h1>

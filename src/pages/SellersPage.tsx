@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, FileText, Maximize2, Search, UserRound, X } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Download, FileText, Maximize2, Search, UserRound, X } from 'lucide-react';
 import { mockSellers, mockNewSellerApplications } from '../data/mockData';
+import { ActionButton } from '../components/common';
 import type { Seller, NewSellerApplication } from '../types';
 
 type VendorView = 'all' | 'new';
@@ -43,18 +44,27 @@ const SellersPage: React.FC = () => {
   const [selectedSeller, setSelectedSeller] = useState<Seller | null>(null);
   const [citizenIdInput, setCitizenIdInput] = useState('');
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [openStallsSellerId, setOpenStallsSellerId] = useState<string | null>(null);
   const [vendorPage, setVendorPage] = useState(1);
   const [applicationPage, setApplicationPage] = useState(1);
+
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setOpenStallsSellerId(null);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   const pageSize = 5;
 
   const filteredSellers = sellers.filter((seller) => {
-    const matchesSearch = [seller.name, seller.phone, seller.idNumber].join(' ').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = [seller.name, seller.phone, seller.citizen_id].join(' ').toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
   const filteredApplications = applications.filter((app) => {
-    const matchesSearch = [app.name, app.phone, app.idNumber].join(' ').toLowerCase().includes(applicationSearch.toLowerCase());
+    const matchesSearch = [app.name, app.phone, app.citizen_id].join(' ').toLowerCase().includes(applicationSearch.toLowerCase());
     return matchesSearch;
   });
 
@@ -87,18 +97,12 @@ const SellersPage: React.FC = () => {
           name: item.name ?? item.username ?? 'ไม่ระบุชื่อ',
           phone: item.phone ?? '-',
           email: item.email ?? '-',
-          idNumber: item.citizen_id ?? '-',
-          zones: Array.isArray(item.current_stalls) ? item.current_stalls : [],
+          citizen_id: item.citizen_id ?? '-',
+          current_stalls: Array.isArray(item.current_stalls) ? item.current_stalls : [],
           status: item.status === 'active' ? 'active' : 'inactive',
           avatar: item.avatar ?? buildAvatarUrl(item.name ?? item.username ?? 'Seller'),
-          document: item.document_url
-            ? {
-                url: item.document_url,
-                type: 'id_card',
-                thumbnail: item.document_url,
-                fileName: item.document_image ?? 'document.jpg',
-              }
-            : undefined,
+          document_url: item.document_url ?? null,
+          document_image: item.document_image ?? null,
         }));
 
         setSellers(mappedSellers);
@@ -145,19 +149,15 @@ const SellersPage: React.FC = () => {
         const mappedApplications: NewSellerApplication[] = applicationsData.map((item: any) => ({
           id: String(item.id),
           name: item.name ?? item.username ?? 'ไม่ระบุชื่อ',
-          idNumber: item.citizen_id ?? '-',
+          citizen_id: item.citizen_id ?? '-',
           phone: item.phone ?? '-',
           email: item.email ?? '-',
           address: item.address ?? '-',
           avatar: item.avatar ?? buildAvatarUrl(item.name ?? item.username ?? 'Seller'),
-          appliedDate: item.submission_date ?? item.created_at ?? '-',
+          submission_date: item.submission_date ?? item.created_at ?? '-',
           status: item.document_status === 'approved' ? 'approved' : item.document_status === 'rejected' ? 'rejected' : 'pending',
-          document: {
-            url: item.document_url ?? '#',
-            type: 'id_card',
-            thumbnail: item.document_url ?? undefined,
-            fileName: item.document_image ?? 'document.jpg',
-          },
+          document_url: item.document_url ?? null,
+          document_image: item.document_image ?? null,
         }));
 
         setApplications(mappedApplications);
@@ -193,7 +193,7 @@ const SellersPage: React.FC = () => {
 
   useEffect(() => {
     if (selectedApplication) {
-      const initialCitizenId = selectedApplication.idNumber && selectedApplication.idNumber !== '-' ? selectedApplication.idNumber : '';
+      const initialCitizenId = selectedApplication.citizen_id && selectedApplication.citizen_id !== '-' ? selectedApplication.citizen_id : '';
       setCitizenIdInput(initialCitizenId);
     } else {
       setCitizenIdInput('');
@@ -233,7 +233,7 @@ const SellersPage: React.FC = () => {
       const endpoint = status === 'approved' ? `/api/v1/admin/sellers/${id}/approve` : `/api/v1/admin/sellers/${id}/reject`;
       const body = status === 'approved'
         ? {
-            citizen_id: (citizenIdInput.trim() || selectedApplication?.idNumber || '').replace(/\D/g, ''),
+            citizen_id: (citizenIdInput.trim() || selectedApplication?.citizen_id || '').replace(/\D/g, ''),
             address: selectedApplication?.address ?? '',
           }
         : undefined;
@@ -261,7 +261,7 @@ const SellersPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 bg-slate-50 p-6 md:p-8">
+    <div className="space-y-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">ข้อมูลผู้ค้า</h1>
         <p className="text-sm text-slate-600 md:text-base">จัดการข้อมูลผู้ค้าและตรวจสอบคำขอสมัครใหม่</p>
@@ -323,25 +323,71 @@ const SellersPage: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-sm text-slate-700">{seller.idNumber}</td>
+                    <td className="px-4 py-4 text-sm text-slate-700">{seller.citizen_id}</td>
                     <td className="px-4 py-4 text-sm text-slate-700">{seller.phone}</td>
                     <td className="px-4 py-4">
-                      <div className="flex flex-wrap gap-2">
-                        {seller.zones.map((zone) => (
-                          <span key={zone} className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-medium text-sky-700">
-                            {zone}
+                      {seller.current_stalls && seller.current_stalls.length > 0 ? (
+                        <div className="relative group flex items-center gap-1.5 w-fit">
+                          {/* First Stall */}
+                          <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-medium text-sky-700 select-none">
+                            {seller.current_stalls[0]}
                           </span>
-                        ))}
-                      </div>
+                          
+                          {/* More stalls count badge */}
+                          {seller.current_stalls.length > 1 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenStallsSellerId(openStallsSellerId === String(seller.id) ? null : String(seller.id));
+                              }}
+                              className="rounded-full bg-slate-100 hover:bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 transition select-none outline-none"
+                            >
+                              +{seller.current_stalls.length - 1}
+                            </button>
+                          )}
+
+                          {/* Beautiful Interactive Tooltip */}
+                          {seller.current_stalls.length > 1 && (
+                            <div 
+                              onClick={(e) => e.stopPropagation()}
+                              className={`absolute bottom-full left-1/2 z-20 mb-2 w-48 -translate-x-1/2 transition-all duration-200 ${
+                                openStallsSellerId === String(seller.id) 
+                                  ? 'scale-100 opacity-100 pointer-events-auto' 
+                                  : 'scale-95 opacity-0 pointer-events-none group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto'
+                              }`}
+                            >
+                              <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                                <div className="flex items-center justify-between mb-1.5 border-b border-slate-100 pb-1">
+                                  <p className="text-xs font-bold text-slate-500">แผงค้าทั้งหมด ({seller.current_stalls.length})</p>
+                                  <button 
+                                    onClick={() => setOpenStallsSellerId(null)} 
+                                    className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                                  >
+                                    &times;
+                                  </button>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {seller.current_stalls.map((zone) => (
+                                    <span key={zone} className="rounded-md border border-sky-100 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                                      {zone}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="absolute top-full left-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1 bg-white border-r border-b border-slate-200 rotate-45"></div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-slate-400">-</span>
+                      )}
                     </td>
                     <td className="px-4 py-4">
-                      <button
+                      <ActionButton
+                        type="view"
                         onClick={() => setSelectedSeller(seller)}
-                        className="rounded-full border border-slate-200 bg-slate-50 p-2 text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
-                        aria-label="ดูข้อมูลผู้ค้า"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
+                        title="ดูข้อมูลผู้ค้า"
+                      />
                     </td>
                   </tr>
                 ))
@@ -428,15 +474,15 @@ const SellersPage: React.FC = () => {
                         <img src={app.avatar} alt={app.name} className="h-10 w-10 rounded-full object-cover" />
                         <div>
                           <p className="font-medium text-slate-900">{app.name}</p>
-                          <p className="text-sm text-slate-500">{app.idNumber}</p>
+                          <p className="text-sm text-slate-500">{app.citizen_id}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-700">{app.phone}</td>
-                    <td className="px-4 py-4 text-sm text-slate-700">{formatDate(app.appliedDate)}</td>
+                    <td className="px-4 py-4 text-sm text-slate-700">{formatDate(app.submission_date)}</td>
                     <td className="px-4 py-4">
-                      {app.document?.thumbnail ? (
-                        <img src={app.document.thumbnail} alt="thumbnail" className="h-12 w-16 rounded-lg object-cover" />
+                      {app.document_url ? (
+                        <img src={app.document_url as string} alt="thumbnail" className="h-12 w-16 rounded-lg object-cover" />
                       ) : (
                         <div className="flex h-12 w-16 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-slate-400">
                           <FileText className="h-5 w-5" />
@@ -444,18 +490,16 @@ const SellersPage: React.FC = () => {
                       )}
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${getStatusColor(app.status)}`}>
-                        {app.status === 'pending' ? 'รอตรวจสอบ' : getStatusLabel(app.status)}
+                      <span className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${getStatusColor(app.status || 'pending')}`}>
+                        {app.status === 'pending' ? 'รอตรวจสอบ' : getStatusLabel(app.status || 'pending')}
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <button
+                      <ActionButton
+                        type="view"
                         onClick={() => setSelectedApplication(app)}
-                        className="rounded-full border border-slate-200 bg-slate-50 p-2 text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
-                        aria-label="ตรวจสอบเอกสาร"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
+                        title="ตรวจสอบเอกสาร"
+                      />
                     </td>
                   </tr>
                 ))
@@ -525,7 +569,7 @@ const SellersPage: React.FC = () => {
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-white p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">เลขบัตรประชาชน</p>
-                    <p className="mt-1 text-base font-medium text-slate-900">{selectedSeller.idNumber}</p>
+                    <p className="mt-1 text-base font-medium text-slate-900">{selectedSeller.citizen_id}</p>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-white p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">สถานะ</p>
@@ -534,8 +578,8 @@ const SellersPage: React.FC = () => {
                   <div className="rounded-xl border border-slate-200 bg-white p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">เลขแผงปัจจุบัน</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {selectedSeller.zones.length > 0 ? (
-                        selectedSeller.zones.map((zone) => (
+                      {(selectedSeller.current_stalls || []).length > 0 ? (
+                        (selectedSeller.current_stalls || []).map((zone) => (
                           <span key={zone} className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-medium text-sky-700">
                             {zone}
                           </span>
@@ -561,8 +605,8 @@ const SellersPage: React.FC = () => {
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <div className="flex h-56 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-sky-100 to-slate-100">
-                    {selectedSeller.document?.thumbnail ? (
-                      <img src={selectedSeller.document.thumbnail} alt="ภาพเอกสารผู้ค้า" className="h-full w-full object-cover" />
+                    {selectedSeller.document_url ? (
+                      <img src={selectedSeller.document_url as string} alt="ภาพเอกสารผู้ค้า" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-100 text-sm text-slate-500">
                         ไม่มีภาพเอกสารที่แสดง
@@ -629,7 +673,7 @@ const SellersPage: React.FC = () => {
                   </div>
                 </div>
 
-                <p className="mt-4 text-sm text-slate-500">📅 วันที่ส่งสมัคร: {formatDate(selectedApplication.appliedDate)}</p>
+                <p className="mt-4 text-sm text-slate-500">📅 วันที่ส่งสมัคร: {formatDate(selectedApplication.submission_date)}</p>
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -647,11 +691,11 @@ const SellersPage: React.FC = () => {
                   <div className="flex h-56 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-sky-100 to-slate-100">
                     <button
                       type="button"
-                      onClick={() => setZoomedImage(selectedApplication.document?.thumbnail ?? 'https://images.unsplash.com/photo-1578496781402-06032763b4f3?auto=format&fit=crop&w=900&q=80')}
+                      onClick={() => setZoomedImage((selectedApplication.document_url as string) ?? 'https://images.unsplash.com/photo-1578496781402-06032763b4f3?auto=format&fit=crop&w=900&q=80')}
                       className="group relative h-full w-full"
                     >
                       <img
-                        src={selectedApplication.document?.thumbnail ?? 'https://images.unsplash.com/photo-1578496781402-06032763b4f3?auto=format&fit=crop&w=900&q=80'}
+                        src={(selectedApplication.document_url as string) ?? 'https://images.unsplash.com/photo-1578496781402-06032763b4f3?auto=format&fit=crop&w=900&q=80'}
                         alt="ภาพบัตรประชาชน"
                         className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
                       />
@@ -668,9 +712,9 @@ const SellersPage: React.FC = () => {
                 <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-slate-500" />
-                    <span className="text-slate-700">{selectedApplication.document?.fileName ?? 'id_card_somchai.jpg'}</span>
+                    <span className="text-slate-700">{selectedApplication.document_image ?? 'id_card.jpg'}</span>
                   </div>
-                  <a href={selectedApplication.document?.url ?? '#'} className="flex items-center gap-1 font-medium text-sky-700 hover:text-sky-800">
+                  <a href={selectedApplication.document_url ?? '#'} className="flex items-center gap-1 font-medium text-sky-700 hover:text-sky-800">
                     <Download className="h-4 w-4" />
                     ดาวน์โหลดไฟล์
                   </a>
@@ -680,14 +724,14 @@ const SellersPage: React.FC = () => {
 
             <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-4 sm:flex-row sm:justify-end">
               <button
-                onClick={() => handleReview(selectedApplication.id, 'rejected')}
+                onClick={() => handleReview(String(selectedApplication.id), 'rejected')}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700"
               >
                 <X className="h-4 w-4" />
                 ปฏิเสธ / ข้อมูลไม่ชัดเจน
               </button>
               <button
-                onClick={() => handleReview(selectedApplication.id, 'approved')}
+                onClick={() => handleReview(String(selectedApplication.id), 'approved')}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
               >
                 <CheckCircle2 className="h-4 w-4" />

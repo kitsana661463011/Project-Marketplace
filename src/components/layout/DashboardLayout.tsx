@@ -1,7 +1,6 @@
 import React from 'react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
-import { Breadcrumb } from './Breadcrumb';
 import type { NavItem, User } from '../../types';
 
 interface DashboardLayoutProps {
@@ -46,8 +45,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
         {/* Page Content */}
         <main className="flex-1 overflow-auto">
-          <div className="p-4 lg:p-8 mt-16 lg:mt-20 max-w-7xl mx-auto w-full">
-            <Breadcrumb />
+          <div className="p-4 lg:p-6 mt-16 lg:mt-20 w-full">
             {children}
           </div>
         </main>
