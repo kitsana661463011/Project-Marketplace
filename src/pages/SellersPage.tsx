@@ -229,6 +229,14 @@ const SellersPage: React.FC = () => {
   };
 
   const handleReview = async (id: string, status: 'approved' | 'rejected') => {
+    if (status === 'approved') {
+      const citizenId = (citizenIdInput.trim() || selectedApplication?.citizen_id || '').replace(/\D/g, '');
+      if (citizenId.length !== 13) {
+        alert('กรุณากรอกเลขบัตรประชาชนให้ครบ 13 หลักค่ะ');
+        return;
+      }
+    }
+
     try {
       const endpoint = status === 'approved' ? `/api/v1/admin/sellers/${id}/approve` : `/api/v1/admin/sellers/${id}/reject`;
       const body = status === 'approved'
@@ -248,15 +256,17 @@ const SellersPage: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Unable to update seller application');
+        const errPayload = await response.json().catch(() => ({}));
+        const errMsg = errPayload?.message || errPayload?.errors?.citizen_id?.[0] || 'ไม่สามารถอัปเดตข้อมูลผู้ค้าได้';
+        throw new Error(errMsg);
       }
 
       setApplications((current) => current.map((item) => (item.id === id ? { ...item, status } : item)));
       setSellers((current) => current.map((seller) => (seller.id === id ? { ...seller, status: status === 'approved' ? 'active' : 'inactive' } : seller)));
       setSelectedApplication(null);
       setCitizenIdInput('');
-    } catch {
-      // Keep the UI responsive and avoid crashing on failed review requests.
+    } catch (err: any) {
+      alert(err.message || 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
     }
   };
 

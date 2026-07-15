@@ -20,6 +20,7 @@ type CategoryShareItem = {
 
 type RecentActivityItem = {
   id?: string | number;
+  type?: string;
   title: string;
   owner?: string;
   status: string;
@@ -37,6 +38,20 @@ type DashboardPayload = {
 const createFallbackData = (): DashboardPayload => ({
   overviewCards: [
     {
+      title: 'แจ้งเตือนเหตุ',
+      value: mockDashboardMetrics.notificationCount,
+      subValue: '',
+      detail: 'ต้องตรวจสอบทันที',
+      type: 'report',
+    },
+    {
+      title: 'คำขอจองที่รออนุมัติ',
+      value: mockDashboardMetrics.pendingCount,
+      subValue: '',
+      detail: 'รอการตรวจสอบจากแอดมิน',
+      type: 'booking',
+    },
+    {
       title: 'ล็อกที่มีคนจอง',
       value: mockDashboardMetrics.totalRating,
       subValue: `/${mockDashboardMetrics.totalRating + mockDashboardMetrics.readyCount}`,
@@ -50,20 +65,6 @@ const createFallbackData = (): DashboardPayload => ({
       detail: 'พร้อมเปิดให้จอง',
       type: 'available',
     },
-    {
-      title: 'คำขอจองที่รออนุมัติ',
-      value: mockDashboardMetrics.pendingCount,
-      subValue: '',
-      detail: 'รอการตรวจสอบจากแอดมิน',
-      type: 'booking',
-    },
-    {
-      title: 'แจ้งเตือนเหตุ',
-      value: mockDashboardMetrics.notificationCount,
-      subValue: '',
-      detail: 'ต้องตรวจสอบทันที',
-      type: 'report',
-    },
   ],
   categories: mockDashboardMetrics.categories.map((category) => ({
     id: category.id,
@@ -73,6 +74,7 @@ const createFallbackData = (): DashboardPayload => ({
   })),
   recentActivity: mockDashboardMetrics.recentReviews.map((review) => ({
     id: review.id,
+    type: 'booking',
     title: review.storeName,
     status: review.status,
     status_label: review.status === 'success' ? 'สำเร็จ' : 'รออนุมัติ',
@@ -303,9 +305,20 @@ export const Dashboard: React.FC = () => {
           <div className="mt-6 space-y-3">
             {recentItems.slice(0, 4).map((item, index) => {
               const isSuccess = ['approved', 'success', 'resolved', 'verified'].includes(item.status.toLowerCase());
+              const isBooking = item.type === 'booking';
+              const cursorClass = isBooking ? 'cursor-pointer hover:border-sky-300 hover:bg-sky-50/20 active:scale-[0.99] transition-all' : '';
 
               return (
-                <div key={`${item.id ?? 'activity'}-${item.title}-${item.created_at ?? index}`} className="group flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3.5 transition-all duration-200 hover:border-blue-100 hover:bg-blue-50/20 hover:shadow-sm">
+                <div 
+                  key={`${item.id ?? 'activity'}-${item.title}-${item.created_at ?? index}`} 
+                  onClick={() => {
+                    if (isBooking && item.id) {
+                      navigate(`/verifications?booking_id=${item.id}`);
+                    }
+                  }}
+                  title={isBooking ? 'คลิกเพื่อตรวจสอบรายการจองนี้' : undefined}
+                  className={`group flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3.5 transition-all duration-200 hover:shadow-sm ${cursorClass}`}
+                >
                   <div className="flex items-center gap-3.5">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 text-sm font-bold text-blue-600">
                       {item.title.charAt(0)}

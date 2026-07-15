@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Info, Save, Trash2, UploadCloud, Eye, CheckCircle2, Clock, XCircle } from 'lucide-react';
 
 type PaymentSettingsResponse = {
@@ -20,6 +21,7 @@ const initialFormData = {
 
 
 const PaymentsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState(initialFormData);
   const [selectedFileName, setSelectedFileName] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -85,6 +87,36 @@ const PaymentsPage: React.FC = () => {
 
   const [payments, setPayments] = useState<any[]>([]);
   const [selectedSlip, setSelectedSlip] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
+
+  const filteredAndSortedPayments = useMemo(() => {
+    let list = [...payments];
+    if (statusFilter !== 'all') {
+      list = list.filter((p) => p.status === statusFilter);
+    }
+
+    const statusPriority: Record<string, number> = {
+      pending: 1,
+      verified: 2,
+      success: 2,
+      rejected: 3,
+    };
+
+    list.sort((a, b) => {
+      const priorityA = statusPriority[a.status] || 99;
+      const priorityB = statusPriority[b.status] || 99;
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      const dateA = a.payment_date ? new Date(a.payment_date).getTime() : 0;
+      const dateB = b.payment_date ? new Date(b.payment_date).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    return list;
+  }, [payments, statusFilter]);
 
   const loadPayments = async () => {
     try {
@@ -341,9 +373,24 @@ const PaymentsPage: React.FC = () => {
 
       {/* Payment History Table */}
       <div className="mt-8 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
-          <h2 className="text-lg font-bold text-slate-800">ประวัติการชำระเงินล่าสุด</h2>
-          <p className="mt-1 text-sm text-slate-500">ตรวจสอบและจัดการรายการชำระเงินที่เข้ามาในระบบ</p>
+        <div className="border-b border-slate-200 bg-slate-50 px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">ประวัติการชำระเงินล่าสุด</h2>
+            <p className="mt-1 text-sm text-slate-500">ตรวจสอบและจัดการรายการชำระเงินที่เข้ามาในระบบ (เรียงตามสถานะ รอตรวจสอบ ขึ้นก่อน)</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500">สถานะ:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-sky-500 cursor-pointer shadow-sm"
+            >
+              <option value="all">ทั้งหมด</option>
+              <option value="pending">รอตรวจสอบ</option>
+              <option value="verified">สำเร็จ</option>
+              <option value="rejected">ปฏิเสธ</option>
+            </select>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -352,25 +399,24 @@ const PaymentsPage: React.FC = () => {
                 <th className="px-6 py-4">วันที่/เวลา</th>
                 <th className="px-6 py-4">ผู้ค้า / แผงค้า</th>
                 <th className="px-6 py-4">จำนวนเงิน</th>
-                <th className="px-6 py-4">ช่องทาง</th>
                 <th className="px-6 py-4">สถานะ</th>
-                <th className="px-6 py-4 text-center">จัดการ</th>
+                <th className="px-6 py-4 text-center">ตรวจสอบ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-              {payments.length === 0 ? (
+              {filteredAndSortedPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
                     ไม่พบประวัติการชำระเงินในระบบ
                   </td>
                 </tr>
               ) : (
-                payments.map((txn) => {
+                filteredAndSortedPayments.map((txn) => {
                   const paymentDateStr = txn.payment_date 
                     ? new Date(txn.payment_date).toLocaleString('th-TH', { 
-                        year: 'numeric', month: '2-digit', day: '2-digit', 
-                        hour: '2-digit', minute: '2-digit' 
-                      })
+                      year: 'numeric', month: '2-digit', day: '2-digit', 
+                      hour: '2-digit', minute: '2-digit' 
+                    })
                     : '-';
                   const tenantName = txn.booking?.user?.username || 'ไม่ระบุ';
                   const stallNum = txn.booking?.stall?.stall_number || '-';
@@ -385,20 +431,29 @@ const PaymentsPage: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-slate-800 font-mono font-bold">
                         ฿{(txn.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-slate-600">
-                        {txn.payment_slip ? 'โอนเงิน (แนบสลิป)' : 'เงินสด'}
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {txn.status === 'verified' || txn.status === 'success' ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                          <span 
+                            onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
+                            title="คลิกเพื่อดูรายละเอียดใบจองนี้"
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-200 active:scale-95 shadow-sm"
+                          >
                             <CheckCircle2 size={14} /> สำเร็จ
                           </span>
                         ) : txn.status === 'rejected' ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-700">
+                          <span 
+                            onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
+                            title="คลิกเพื่อดูรายละเอียดใบจองนี้"
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-700 transition hover:bg-rose-200 active:scale-95 shadow-sm"
+                          >
                             <XCircle size={14} /> ปฏิเสธ
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">
+                          <span 
+                            onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
+                            title="คลิกเพื่อดูรายละเอียดใบจองนี้"
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700 transition hover:bg-amber-200 active:scale-95 shadow-sm"
+                          >
                             <Clock size={14} /> รอตรวจสอบ
                           </span>
                         )}

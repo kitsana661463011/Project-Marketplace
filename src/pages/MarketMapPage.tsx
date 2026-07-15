@@ -165,7 +165,7 @@ export const MarketMapPage: React.FC = () => {
 
       const payload = {
         items: stalls.map(s => ({
-          map_item_id: s.id.startsWith('new-') ? null : Number(s.id),
+          map_item_id: s.id,
           item_type: s.item_type,
           stall_id: s.stall_id || null,
           zone_id: s.zone_id || null,
@@ -175,6 +175,8 @@ export const MarketMapPage: React.FC = () => {
           width: s.width,
           height: s.height,
           fill_color: s.fill_color || null,
+          size: s.size || null,
+          status: s.status || null,
         }))
       };
 
@@ -618,8 +620,8 @@ export const MarketMapPage: React.FC = () => {
           <button
             onClick={() => setShowGrid(!showGrid)}
             className={`flex h-11 w-11 items-center justify-center rounded-lg border transition-all ${showGrid
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm'
-                : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
+              ? 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm'
+              : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
               }`}
             title="แสดงเส้นกริด"
           >
@@ -640,8 +642,8 @@ export const MarketMapPage: React.FC = () => {
             onClick={triggerSaveConfirm}
             disabled={saving || !hasChanges}
             className={`flex h-11 items-center gap-2 rounded-lg px-5 text-sm lg:text-base font-black transition-all duration-200 ${!hasChanges
-                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60'
-                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/10 active:scale-95'
+              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60'
+              : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/10 active:scale-95'
               }`}
           >
             <Save size={16} />
@@ -713,8 +715,8 @@ export const MarketMapPage: React.FC = () => {
             <button
               onClick={() => setMode('select')}
               className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-sm lg:text-base font-bold transition-all ${mode === 'select'
-                  ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50'
-                  : 'text-slate-500 hover:text-slate-700'
+                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50'
+                : 'text-slate-500 hover:text-slate-700'
                 }`}
             >
               <MousePointer size={14} />
@@ -723,8 +725,8 @@ export const MarketMapPage: React.FC = () => {
             <button
               onClick={() => setMode('move')}
               className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-sm lg:text-base font-bold transition-all ${mode === 'move'
-                  ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50'
-                  : 'text-slate-500 hover:text-slate-700'
+                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50'
+                : 'text-slate-500 hover:text-slate-700'
                 }`}
             >
               <Move size={14} />
@@ -830,8 +832,8 @@ export const MarketMapPage: React.FC = () => {
                   className={`absolute flex select-none flex-col items-center justify-center rounded-2xl text-center border-2 transition-all duration-100 shadow-sm ${getStatusColor(
                     stall
                   )} ${isSelected
-                      ? 'ring-4 ring-indigo-500/25 ring-offset-2 ring-offset-white border-indigo-600 scale-[1.04] z-35 shadow-lg shadow-indigo-600/10'
-                      : stall.item_type === 'zone' ? 'z-0 border-2' : 'z-10'
+                    ? 'ring-4 ring-indigo-500/25 ring-offset-2 ring-offset-white border-indigo-600 scale-[1.04] z-35 shadow-lg shadow-indigo-600/10'
+                    : stall.item_type === 'zone' ? 'z-0 border-2' : 'z-10'
                     } ${stall.isLocked ? 'cursor-default opacity-85' : 'cursor-move hover:scale-[1.02] active:scale-[0.98]'
                     }`}
                   style={{
@@ -948,8 +950,8 @@ export const MarketMapPage: React.FC = () => {
                     <button
                       onClick={() => toggleLockStall(selectedStall.id)}
                       className={`rounded-xl p-3 border transition-all ${selectedStall.isLocked
-                          ? 'bg-rose-50 border-rose-200 text-rose-600 shadow-sm'
-                          : 'bg-white border-slate-200 text-slate-400 hover:text-slate-800 shadow-sm'
+                        ? 'bg-rose-50 border-rose-200 text-rose-600 shadow-sm'
+                        : 'bg-white border-slate-200 text-slate-400 hover:text-slate-800 shadow-sm'
                         }`}
                       title={selectedStall.isLocked ? 'ปลดล็อกตำแหน่ง' : 'ล็อกตำแหน่ง'}
                     >
@@ -969,7 +971,7 @@ export const MarketMapPage: React.FC = () => {
                         <div className="flex justify-between">
                           <span className="font-semibold text-slate-500">สถานะการเช่า:</span>
                           <span className={`font-black ${selectedStall.status === 'available' ? 'text-emerald-600' :
-                              selectedStall.status === 'occupied' ? 'text-rose-600' : 'text-amber-600'
+                            selectedStall.status === 'occupied' ? 'text-rose-600' : 'text-amber-600'
                             }`}>{getStatusLabel(selectedStall.status)}</span>
                         </div>
                         <div className="flex justify-between">
@@ -1096,7 +1098,7 @@ export const MarketMapPage: React.FC = () => {
 
             {/* Modal Form - Scrollable inner body */}
             <div className="p-6 space-y-5 text-slate-700 overflow-y-auto flex-1">
-              
+
               {/* Name/Code Input */}
               <div>
                 <label className="text-sm lg:text-base font-bold text-slate-800">รหัส / ชื่อเรียก</label>
@@ -1405,8 +1407,8 @@ export const MarketMapPage: React.FC = () => {
                 <button
                   onClick={confirmDialog.onConfirm}
                   className={`flex-1 rounded-xl py-3 text-sm font-bold text-white transition-all shadow-sm ${confirmDialog.type === 'danger'
-                      ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/10'
-                      : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/10'
+                    ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/10'
+                    : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/10'
                     }`}
                 >
                   {confirmDialog.actionText}

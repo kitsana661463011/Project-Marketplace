@@ -35,9 +35,17 @@ export function useBadgeCounts(intervalMs = 30_000) {
     // Initial fetch
     void fetchCounts();
 
+    const handleRefresh = () => {
+      void fetchCounts();
+    };
+    window.addEventListener('refresh-badges', handleRefresh);
+
     // Poll periodically
     const id = setInterval(() => void fetchCounts(), intervalMs);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('refresh-badges', handleRefresh);
+    };
   }, [fetchCounts, intervalMs]);
 
   return counts;

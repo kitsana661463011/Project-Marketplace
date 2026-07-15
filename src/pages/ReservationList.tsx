@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   CheckCheck,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   FileText,
   ImageOff,
@@ -21,6 +23,7 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import type { Announcement, IssueReport } from '../types';
 import { ActionButton } from '../components/common';
 
@@ -36,6 +39,11 @@ interface ReservationItem {
   bookingDateValue: string;
   depositAmount: number;
   phone: string;
+  email: string;
+  stallSize?: string;
+  zoneName?: string;
+  startDate?: string;
+  endDate?: string;
   proofImage?: string;
   status: ReservationStatus;
 }
@@ -50,8 +58,11 @@ interface BookingApiItem {
   status: string | null;
   user_name: string | null;
   user_email: string | null;
+  user_phone: string | null;
   stall_number: string | null;
+  stall_size: string | null;
   stall_status: string | null;
+  zone_name: string | null;
   payment_id: number | null;
   amount: number | null;
   payment_date: string | null;
@@ -96,7 +107,12 @@ const mapBookingApiItem = (item: BookingApiItem): ReservationItem => ({
   bookingDate: formatBookingDate(item.booking_date || item.start_date),
   bookingDateValue: item.booking_date || item.start_date || '',
   depositAmount: item.amount || 0,
-  phone: item.user_email || '-',
+  phone: item.user_phone || '-',
+  email: item.user_email || '-',
+  stallSize: item.stall_size || undefined,
+  zoneName: item.zone_name || undefined,
+  startDate: item.start_date || undefined,
+  endDate: item.end_date || undefined,
   proofImage: item.payment_slip || undefined,
   status: toReservationStatus(item.status),
 });
@@ -152,6 +168,9 @@ const formatAnnouncementDate = (value?: string | null) => {
 };
 
 export const ReservationListPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryBookingId = searchParams.get('booking_id');
+
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ReservationStatus | 'all'>('all');
@@ -162,6 +181,17 @@ export const ReservationListPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setRefreshTrigger((prev) => prev + 1);
+    }, 30_000); // Poll every 30 seconds
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearch(search.trim());
@@ -171,20 +201,25 @@ export const ReservationListPage: React.FC = () => {
   }, [search]);
 
   useEffect(() => {
+    setCurrentPage(1);
     let isCancelled = false;
 
     const params = new URLSearchParams();
     if (debouncedSearch) {
       params.set('search', debouncedSearch);
     }
-    if (statusFilter !== 'all') {
-      params.set('status', statusFilter === 'rejected' ? 'cancelled' : statusFilter);
-    }
-    if (startDate) {
-      params.set('start_date', startDate);
-    }
-    if (endDate) {
-      params.set('end_date', endDate);
+    if (queryBookingId) {
+      // If navigating from payments, fetch the specific booking or fetch all without filters to ensure it's found
+    } else {
+      if (statusFilter !== 'all') {
+        params.set('status', statusFilter === 'rejected' ? 'cancelled' : statusFilter);
+      }
+      if (startDate) {
+        params.set('start_date', startDate);
+      }
+      if (endDate) {
+        params.set('end_date', endDate);
+      }
     }
 
     setLoading(true);
@@ -204,7 +239,20 @@ export const ReservationListPage: React.FC = () => {
         if (isCancelled) return;
 
         const items = Array.isArray(payload?.data) ? payload.data : [];
-        setReservations(items.map(mapBookingApiItem));
+        const mapped = items.map(mapBookingApiItem);
+        setReservations(mapped);
+
+        if (queryBookingId) {
+          const match = mapped.find((item: ReservationItem) => String(item.id) === String(queryBookingId));
+          if (match) {
+            setSelectedReservation(match);
+            
+            // Clean up query param
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete('booking_id');
+            setSearchParams(newParams, { replace: true });
+          }
+        }
       })
       .catch(() => {
         if (!isCancelled) {
@@ -221,7 +269,14 @@ export const ReservationListPage: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [debouncedSearch, statusFilter, startDate, endDate]);
+  }, [debouncedSearch, statusFilter, startDate, endDate, queryBookingId, searchParams, setSearchParams, refreshTrigger]);
+
+  const totalPages = Math.ceil(reservations.length / itemsPerPage);
+  const activePage = Math.min(currentPage, Math.max(totalPages, 1));
+  const currentReservations = useMemo(() => {
+    const startIndex = (activePage - 1) * itemsPerPage;
+    return reservations.slice(startIndex, startIndex + itemsPerPage);
+  }, [reservations, activePage, itemsPerPage]);
 
   const handleStatusChange = async (bookingId: number, status: ReservationStatus) => {
     let endpoint = 'reject';
@@ -248,6 +303,7 @@ export const ReservationListPage: React.FC = () => {
       setReservations((current) => current.map((item) => (item.id === bookingId ? { ...item, status } : item)));
       setSelectedReservation((current) => (current && current.id === bookingId ? { ...current, status } : current));
       setError(null);
+      window.dispatchEvent(new Event('refresh-badges'));
     } catch {
       setError('อัปเดตสถานะไม่สำเร็จ กรุณาลองใหม่');
     }
@@ -330,14 +386,14 @@ export const ReservationListPage: React.FC = () => {
                     กำลังโหลดข้อมูลรายการจอง...
                   </td>
                 </tr>
-              ) : reservations.length === 0 ? (
+              ) : currentReservations.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
                     ไม่พบรายการจองตามเงื่อนไขที่เลือก
                   </td>
                 </tr>
               ) : (
-                reservations.map((item) => (
+                currentReservations.map((item) => (
                   <tr key={item.id} className="border-t border-slate-200 bg-white">
                     <td className="px-4 py-3 font-medium text-slate-900">{item.bookingId}</td>
                     <td className="px-4 py-3">
@@ -389,6 +445,36 @@ export const ReservationListPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-white p-4">
+            <button
+              onClick={() => setCurrentPage((current) => Math.max(1, current - 1))}
+              disabled={activePage === 1}
+              className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`h-9 w-9 rounded-full text-sm font-medium transition ${
+                  activePage === page ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              onClick={() => setCurrentPage((current) => Math.min(totalPages, current + 1))}
+              disabled={activePage === totalPages}
+              className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </section>
 
       {selectedReservation && (
@@ -414,23 +500,41 @@ export const ReservationListPage: React.FC = () => {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="rounded-xl bg-white p-4 shadow-sm">
                     <p className="text-sm text-slate-500">เลขที่บิล</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">{selectedReservation.bookingId}</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900">{selectedReservation.bookingId}</p>
                   </div>
                   <div className="rounded-xl bg-white p-4 shadow-sm">
                     <p className="text-sm text-slate-500">ชื่อผู้จอง</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">{selectedReservation.tenantName}</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900">{selectedReservation.tenantName}</p>
                   </div>
                   <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">เลขแผงค้า</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">{selectedReservation.stallNumber}</p>
+                    <p className="text-sm text-slate-500">อีเมล</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900 break-all">{selectedReservation.email}</p>
                   </div>
                   <div className="rounded-xl bg-white p-4 shadow-sm">
                     <p className="text-sm text-slate-500">เบอร์โทรศัพท์</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">{selectedReservation.phone}</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900">{selectedReservation.phone}</p>
                   </div>
-                  <div className="rounded-xl bg-white p-4 shadow-sm sm:col-span-2">
-                    <p className="text-sm text-slate-500">วันที่จอง</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">{selectedReservation.bookingDate}</p>
+                  <div className="rounded-xl bg-white p-4 shadow-sm">
+                    <p className="text-sm text-slate-500">โซนตลาด / เลขแผงค้า</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900">
+                      {selectedReservation.zoneName || 'ทั่วไป'} / <span className="text-sky-600 font-bold">{selectedReservation.stallNumber}</span>
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-white p-4 shadow-sm">
+                    <p className="text-sm text-slate-500">ขนาดแผงค้า</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900">{selectedReservation.stallSize || 'ไม่ได้ระบุ'}</p>
+                  </div>
+                  <div className="rounded-xl bg-white p-4 shadow-sm">
+                    <p className="text-sm text-slate-500">วันที่ทำรายการ</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900">{selectedReservation.bookingDate}</p>
+                  </div>
+                  <div className="rounded-xl bg-white p-4 shadow-sm">
+                    <p className="text-sm text-slate-500">ระยะเวลาเช่าแผง</p>
+                    <p className="mt-1 text-base font-semibold text-slate-900">
+                      {selectedReservation.startDate && selectedReservation.endDate
+                        ? `${formatBookingDate(selectedReservation.startDate)} ถึง ${formatBookingDate(selectedReservation.endDate)}`
+                        : '-'}
+                    </p>
                   </div>
                 </div>
 
@@ -1063,6 +1167,7 @@ export const ReportsPage: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [activeCategory, setActiveCategory] = useState<'all' | 'electric' | 'water' | 'structure' | 'clean' | 'feedback' | 'other'>('all');
+  const [activeStatus, setActiveStatus] = useState<'all' | 'pending' | 'progress' | 'resolved'>('all');
   const [selectedReport, setSelectedReport] = useState<IssueReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1120,6 +1225,12 @@ export const ReportsPage: React.FC = () => {
 
   useEffect(() => {
     void loadReports();
+
+    const interval = setInterval(() => {
+      void loadReports();
+    }, 30_000); // Auto refresh every 30 seconds
+
+    return () => clearInterval(interval);
   }, [search, activeCategory]);
 
   useEffect(() => {
@@ -1130,6 +1241,9 @@ export const ReportsPage: React.FC = () => {
 
   const filteredReports = useMemo(() => {
     let filtered = [...reports];
+    if (activeStatus !== 'all') {
+      filtered = filtered.filter((item) => item.status === activeStatus);
+    }
     if (startDate) {
       const start = new Date(startDate);
       start.setHours(0, 0, 0, 0);
@@ -1152,7 +1266,7 @@ export const ReportsPage: React.FC = () => {
       return timeB - timeA;
     });
     return filtered;
-  }, [reports, startDate, endDate]);
+  }, [reports, startDate, endDate, activeStatus]);
 
   const summary = useMemo(() => {
     const total = reports.length;
@@ -1208,6 +1322,7 @@ export const ReportsPage: React.FC = () => {
       setReports((current) => current.map((item) => (item.id === id ? { ...item, status, adminNote } : item)));
       setSelectedReport((current) => (current && current.id === id ? { ...current, status, adminNote } : current));
       setError(null);
+      window.dispatchEvent(new Event('refresh-badges'));
     } catch {
       setError('อัปเดตสถานะไม่สำเร็จ กรุณาลองใหม่');
     } finally {
@@ -1223,44 +1338,67 @@ export const ReportsPage: React.FC = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div 
+          onClick={() => setActiveStatus('all')}
+          className={`rounded-2xl border p-4 shadow-sm cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] ${
+            activeStatus === 'all' ? 'border-sky-500 bg-sky-50/30 ring-2 ring-sky-500/20' : 'border-slate-200 bg-white'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-500">ทั้งหมด</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.total}</p>
+              <p className="text-sm text-slate-500 font-semibold">ทั้งหมด</p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">{summary.total}</p>
             </div>
             <div className="rounded-xl bg-slate-100 p-3 text-slate-700">
               <Inbox className="h-5 w-5" />
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+
+        <div 
+          onClick={() => setActiveStatus('pending')}
+          className={`rounded-2xl border p-4 shadow-sm cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] ${
+            activeStatus === 'pending' ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20 shadow-amber-100/10' : 'border-amber-200 bg-amber-50/30'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-amber-700">รอดำเนินการ</p>
-              <p className="mt-2 text-2xl font-semibold text-amber-700">{summary.pending}</p>
+              <p className="text-sm text-amber-700 font-semibold">รอดำเนินการ</p>
+              <p className="mt-2 text-2xl font-bold text-amber-700">{summary.pending}</p>
             </div>
             <div className="rounded-xl bg-amber-100 p-3 text-amber-700">
               <CalendarDays className="h-5 w-5" />
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
+
+        <div 
+          onClick={() => setActiveStatus('progress')}
+          className={`rounded-2xl border p-4 shadow-sm cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] ${
+            activeStatus === 'progress' ? 'border-sky-500 bg-sky-50/60 ring-2 ring-sky-500/20 shadow-sky-100/10' : 'border-sky-200 bg-sky-50/30'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-sky-700">กำลังแก้ไข</p>
-              <p className="mt-2 text-2xl font-semibold text-sky-700">{summary.progress}</p>
+              <p className="text-sm text-sky-700 font-semibold">กำลังแก้ไข</p>
+              <p className="mt-2 text-2xl font-bold text-sky-700">{summary.progress}</p>
             </div>
             <div className="rounded-xl bg-sky-100 p-3 text-sky-700">
               <Wrench className="h-5 w-5" />
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+
+        <div 
+          onClick={() => setActiveStatus('resolved')}
+          className={`rounded-2xl border p-4 shadow-sm cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] ${
+            activeStatus === 'resolved' ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/20 shadow-emerald-100/10' : 'border-emerald-200 bg-emerald-50/30'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-emerald-700">แก้ไขเสร็จสิ้น</p>
-              <p className="mt-2 text-2xl font-semibold text-emerald-700">{summary.resolved}</p>
+              <p className="text-sm text-emerald-700 font-semibold">แก้ไขเสร็จสิ้น</p>
+              <p className="mt-2 text-2xl font-bold text-emerald-700">{summary.resolved}</p>
             </div>
             <div className="rounded-xl bg-emerald-100 p-3 text-emerald-700">
               <CheckCircle2 className="h-5 w-5" />
@@ -1530,7 +1668,7 @@ export const AnnouncementsPage: React.FC = () => {
       const params = new URLSearchParams();
       if (search.trim()) params.set('search', search.trim());
 
-      const response = await fetch(`/api/admin/announcements${params.toString() ? `?${params.toString()}` : ''}`);
+      const response = await fetch(`/api/v1/admin/announcements${params.toString() ? `?${params.toString()}` : ''}`);
       if (!response.ok) {
         throw new Error('ไม่สามารถโหลดประกาศได้');
       }
@@ -1699,7 +1837,7 @@ export const AnnouncementsPage: React.FC = () => {
 
   const handleToggleStatus = async (id: string) => {
     try {
-      const response = await fetch(`/api/admin/announcements/${id}/toggle-status`, {
+      const response = await fetch(`/api/v1/admin/announcements/${id}/toggle-status`, {
         method: 'PATCH',
         headers: { Accept: 'application/json' },
       });
@@ -1716,7 +1854,7 @@ export const AnnouncementsPage: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     try {
-      const response = await fetch(`/api/admin/announcements/${id}`, {
+      const response = await fetch(`/api/v1/admin/announcements/${id}`, {
         method: 'DELETE',
         headers: { Accept: 'application/json' },
       });
@@ -1844,8 +1982,8 @@ export const AnnouncementsPage: React.FC = () => {
           <table className="min-w-[1000px] w-full text-sm">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">รูปหน้าปก</th>
                 <th className="px-4 py-3 text-left font-semibold">หัวข้อ</th>
+                <th className="px-4 py-3 text-left font-semibold">รูปหน้าปก</th>
                 <th className="px-4 py-3 text-left font-semibold">หมวดหมู่</th>
                 <th className="px-4 py-3 text-left font-semibold">วันที่เผยแพร่</th>
                 <th className="px-4 py-3 text-left font-semibold">แสดงบนแอป</th>
@@ -1870,6 +2008,10 @@ export const AnnouncementsPage: React.FC = () => {
                 return (
                   <tr key={item.id} className="border-t border-slate-200 bg-white">
                     <td className="px-4 py-3">
+                      <div className="font-semibold text-slate-900">{item.title}</div>
+                      <div className="mt-1 max-w-[260px] text-sm text-slate-500 line-clamp-2">{item.description}</div>
+                    </td>
+                    <td className="px-4 py-3">
                       {item.image ? (
                         <img src={item.image} alt={item.title} className="h-14 w-20 rounded-xl object-cover" />
                       ) : (
@@ -1877,10 +2019,6 @@ export const AnnouncementsPage: React.FC = () => {
                           <ImageOff className="h-5 w-5" />
                         </div>
                       )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-slate-900">{item.title}</div>
-                      <div className="mt-1 max-w-[260px] text-sm text-slate-500 line-clamp-2">{item.description}</div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${categoryMeta.className}`}>
