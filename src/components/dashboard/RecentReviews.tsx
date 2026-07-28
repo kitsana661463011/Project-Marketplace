@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle, AlertCircle, Clock, Info } from 'lucide-react';
 import type { Review } from '../../types';
+import { formatImageUrl } from '../../utils/imageUtils';
 
 interface RecentReviewsProps {
   reviews: Review[];
@@ -83,7 +84,7 @@ export const RecentReviews: React.FC<RecentReviewsProps> = ({
               {/* Avatar */}
               {review.avatar ? (
                 <img
-                  src={review.avatar}
+                  src={formatImageUrl(review.avatar)}
                   alt={review.storeName}
                   className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                 />

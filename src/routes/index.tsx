@@ -49,6 +49,9 @@ const PageShell: React.FC<ShellProps> = ({ title, children }) => {
         if (item.id === 'verifications' && badgeCounts.verifications > 0) {
           return { ...item, badge: badgeCounts.verifications };
         }
+        if (item.id === 'sellers' && badgeCounts.sellers > 0) {
+          return { ...item, badge: badgeCounts.sellers };
+        }
         if (item.id === 'reports' && badgeCounts.reports > 0) {
           return { ...item, badge: badgeCounts.reports };
         }

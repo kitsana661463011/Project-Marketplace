@@ -10,7 +10,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   FileText,
   ImageOff,
   Inbox,
@@ -23,11 +22,11 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Announcement, IssueReport } from '../types';
 import { ActionButton } from '../components/common';
 
-type ReservationStatus = 'pending' | 'approved' | 'rejected';
+type ReservationStatus = 'pending' | 'approved' | 'rejected' | 'refund_requested' | 'refunded';
 
 interface ReservationItem {
   id: number;
@@ -46,6 +45,13 @@ interface ReservationItem {
   endDate?: string;
   proofImage?: string;
   status: ReservationStatus;
+  rejectReason?: string;
+  refundReason?: string;
+  refundBankName?: string;
+  refundAccountNumber?: string;
+  refundAccountName?: string;
+  refundSlip?: string;
+  refundedAt?: string;
 }
 
 interface BookingApiItem {
@@ -56,6 +62,7 @@ interface BookingApiItem {
   start_date: string | null;
   end_date: string | null;
   status: string | null;
+  reject_reason?: string | null;
   user_name: string | null;
   user_email: string | null;
   user_phone: string | null;
@@ -68,11 +75,28 @@ interface BookingApiItem {
   payment_date: string | null;
   payment_slip: string | null;
   payment_status: string | null;
+  refund_reason?: string | null;
+  refund_bank_name?: string | null;
+  refund_account_number?: string | null;
+  refund_account_name?: string | null;
+  refund_slip?: string | null;
+  refunded_at?: string | null;
 }
+
+const formatImageUrl = (path?: string | null) => {
+  if (!path) return undefined;
+  if (path.startsWith('http') || path.startsWith('data:')) {
+    return path;
+  }
+  const cleanPath = path.replace(/^\/storage\//, '').replace(/^storage\//, '').replace(/^\/api\/images\//, '');
+  return `/api/images/${cleanPath}`;
+};
 
 const toReservationStatus = (value?: string | null): ReservationStatus => {
   if (value === 'approved') return 'approved';
-  if (value === 'cancelled') return 'rejected';
+  if (value === 'cancelled' || value === 'rejected') return 'rejected';
+  if (value === 'refund_requested') return 'refund_requested';
+  if (value === 'refunded') return 'refunded';
   return 'pending';
 };
 
@@ -98,42 +122,62 @@ const getInitials = (name?: string | null) => {
   return parts.map((part) => part[0]).join('').toUpperCase();
 };
 
-const mapBookingApiItem = (item: BookingApiItem): ReservationItem => ({
-  id: item.booking_id,
-  bookingId: String(item.booking_id).padStart(6, '0'),
-  tenantName: item.user_name || 'ไม่ระบุ',
-  tenantAvatar: getInitials(item.user_name),
-  stallNumber: item.stall_number || '-',
-  bookingDate: formatBookingDate(item.booking_date || item.start_date),
-  bookingDateValue: item.booking_date || item.start_date || '',
-  depositAmount: item.amount || 0,
-  phone: item.user_phone || '-',
-  email: item.user_email || '-',
-  stallSize: item.stall_size || undefined,
-  zoneName: item.zone_name || undefined,
-  startDate: item.start_date || undefined,
-  endDate: item.end_date || undefined,
-  proofImage: item.payment_slip || undefined,
-  status: toReservationStatus(item.status),
-});
+const mapBookingApiItem = (item: BookingApiItem): ReservationItem => {
+  const effectiveStatus =
+    item.payment_status === 'refund_requested' || item.payment_status === 'refunded'
+      ? item.payment_status
+      : item.status;
+
+  return {
+    id: item.booking_id,
+    bookingId: String(item.booking_id).padStart(6, '0'),
+    tenantName: item.user_name || 'ไม่ระบุ',
+    tenantAvatar: getInitials(item.user_name),
+    stallNumber: item.stall_number || '-',
+    bookingDate: formatBookingDate(item.booking_date || item.start_date),
+    bookingDateValue: item.booking_date || item.start_date || '',
+    depositAmount: item.amount || 0,
+    phone: item.user_phone || '-',
+    email: item.user_email || '-',
+    stallSize: item.stall_size || undefined,
+    zoneName: item.zone_name || undefined,
+    startDate: item.start_date || undefined,
+    endDate: item.end_date || undefined,
+    proofImage: formatImageUrl(item.payment_slip),
+    status: toReservationStatus(effectiveStatus),
+    rejectReason: item.reject_reason || undefined,
+    refundReason: item.refund_reason || undefined,
+    refundBankName: item.refund_bank_name || undefined,
+    refundAccountNumber: item.refund_account_number || undefined,
+    refundAccountName: item.refund_account_name || undefined,
+    refundSlip: formatImageUrl(item.refund_slip),
+    refundedAt: item.refunded_at ? formatBookingDate(item.refunded_at) : undefined,
+  };
+};
 
 const statusOptions: Array<{ label: string; value: ReservationStatus | 'all' }> = [
   { label: 'ทั้งหมด', value: 'all' },
   { label: 'รออนุมัติ', value: 'pending' },
   { label: 'อนุมัติแล้ว', value: 'approved' },
   { label: 'ยกเลิก', value: 'rejected' },
+  { label: 'ขอคืนเงิน', value: 'refund_requested' },
+  { label: 'คืนเงินแล้ว', value: 'refunded' },
 ];
 
 const statusStyles: Record<ReservationStatus, string> = {
-  pending: 'bg-amber-50 text-amber-700',
-  approved: 'bg-emerald-50 text-emerald-700',
-  rejected: 'bg-rose-50 text-rose-700',
+  pending: 'bg-amber-50 text-amber-700 border-amber-200',
+  approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  rejected: 'bg-rose-50 text-rose-700 border-rose-200',
+  refund_requested: 'bg-purple-50 text-purple-700 border-purple-200',
+  refunded: 'bg-sky-50 text-sky-700 border-sky-200',
 };
 
 const statusLabel: Record<ReservationStatus, string> = {
   pending: 'รออนุมัติ',
   approved: 'อนุมัติแล้ว',
   rejected: 'ยกเลิก',
+  refund_requested: 'ขอคืนเงิน',
+  refunded: 'คืนเงินแล้ว',
 };
 
 const PageHeader: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
@@ -168,6 +212,7 @@ const formatAnnouncementDate = (value?: string | null) => {
 };
 
 export const ReservationListPage: React.FC = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryBookingId = searchParams.get('booking_id');
 
@@ -182,7 +227,7 @@ export const ReservationListPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const itemsPerPage = 5;
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
@@ -208,18 +253,11 @@ export const ReservationListPage: React.FC = () => {
     if (debouncedSearch) {
       params.set('search', debouncedSearch);
     }
-    if (queryBookingId) {
-      // If navigating from payments, fetch the specific booking or fetch all without filters to ensure it's found
-    } else {
-      if (statusFilter !== 'all') {
-        params.set('status', statusFilter === 'rejected' ? 'cancelled' : statusFilter);
-      }
-      if (startDate) {
-        params.set('start_date', startDate);
-      }
-      if (endDate) {
-        params.set('end_date', endDate);
-      }
+    if (startDate) {
+      params.set('start_date', startDate);
+    }
+    if (endDate) {
+      params.set('end_date', endDate);
     }
 
     setLoading(true);
@@ -269,14 +307,45 @@ export const ReservationListPage: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [debouncedSearch, statusFilter, startDate, endDate, queryBookingId, searchParams, setSearchParams, refreshTrigger]);
+  }, [debouncedSearch, startDate, endDate, queryBookingId, searchParams, setSearchParams, refreshTrigger]);
 
-  const totalPages = Math.ceil(reservations.length / itemsPerPage);
+  const filteredReservations = useMemo(() => {
+    let list = [...reservations];
+
+    if (statusFilter !== 'all') {
+      list = list.filter((item) => item.status === statusFilter);
+    }
+
+    const priorityMap: Record<ReservationStatus, number> = {
+      pending: 1,
+      refund_requested: 2,
+      approved: 3,
+      refunded: 4,
+      rejected: 5,
+    };
+
+    list.sort((a, b) => {
+      const pA = priorityMap[a.status] ?? 99;
+      const pB = priorityMap[b.status] ?? 99;
+
+      if (pA !== pB) {
+        return pA - pB;
+      }
+
+      const dateA = a.bookingDateValue ? new Date(a.bookingDateValue).getTime() : 0;
+      const dateB = b.bookingDateValue ? new Date(b.bookingDateValue).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    return list;
+  }, [reservations, statusFilter]);
+
+  const totalPages = Math.ceil(filteredReservations.length / itemsPerPage);
   const activePage = Math.min(currentPage, Math.max(totalPages, 1));
   const currentReservations = useMemo(() => {
     const startIndex = (activePage - 1) * itemsPerPage;
-    return reservations.slice(startIndex, startIndex + itemsPerPage);
-  }, [reservations, activePage, itemsPerPage]);
+    return filteredReservations.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredReservations, activePage, itemsPerPage]);
 
   const handleStatusChange = async (bookingId: number, status: ReservationStatus) => {
     let endpoint = 'reject';
@@ -309,9 +378,92 @@ export const ReservationListPage: React.FC = () => {
     }
   };
 
+  const summaryStats = useMemo(() => {
+    const total = reservations.length;
+    const pending = reservations.filter((item) => item.status === 'pending').length;
+    const approved = reservations.filter((item) => item.status === 'approved').length;
+    const refundRequested = reservations.filter((item) => item.status === 'refund_requested').length;
+    return { total, pending, approved, refundRequested };
+  }, [reservations]);
+
   return (
     <div className="space-y-6">
       <PageHeader title="รายการจอง" />
+
+      {/* ── Summary KPI Overview Cards ── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* All */}
+        <div
+          onClick={() => setStatusFilter('all')}
+          className={`cursor-pointer rounded-2xl border p-4 transition-all duration-200 hover:shadow-md ${
+            statusFilter === 'all'
+              ? 'border-sky-400 bg-sky-50/90 ring-2 ring-sky-300'
+              : 'border-sky-200/80 bg-sky-50/50 hover:border-sky-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500">ทั้งหมด</span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100/80 text-sky-600">
+              <Inbox className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-black text-slate-900">{summaryStats.total}</p>
+        </div>
+
+        {/* Pending */}
+        <div
+          onClick={() => setStatusFilter('pending')}
+          className={`cursor-pointer rounded-2xl border p-4 transition-all duration-200 hover:shadow-md ${
+            statusFilter === 'pending'
+              ? 'border-amber-400 bg-amber-50/90 ring-2 ring-amber-300'
+              : 'border-amber-200/80 bg-amber-50/50 hover:border-amber-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-800">รออนุมัติ</span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100/80 text-amber-700">
+              <CalendarDays className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-black text-amber-700">{summaryStats.pending}</p>
+        </div>
+
+        {/* Approved */}
+        <div
+          onClick={() => setStatusFilter('approved')}
+          className={`cursor-pointer rounded-2xl border p-4 transition-all duration-200 hover:shadow-md ${
+            statusFilter === 'approved'
+              ? 'border-emerald-400 bg-emerald-50/90 ring-2 ring-emerald-300'
+              : 'border-emerald-200/80 bg-emerald-50/50 hover:border-emerald-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-800">อนุมัติแล้ว</span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100/80 text-emerald-600">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-black text-emerald-700">{summaryStats.approved}</p>
+        </div>
+
+        {/* Refund Requested */}
+        <div
+          onClick={() => setStatusFilter('refund_requested')}
+          className={`cursor-pointer rounded-2xl border p-4 transition-all duration-200 hover:shadow-md ${
+            statusFilter === 'refund_requested'
+              ? 'border-purple-400 bg-purple-50/90 ring-2 ring-purple-300'
+              : 'border-purple-200/80 bg-purple-50/50 hover:border-purple-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-purple-800">ขอคืนเงิน</span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100/80 text-purple-700">
+              <Receipt className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-black text-purple-700">{summaryStats.refundRequested}</p>
+        </div>
+      </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -361,82 +513,100 @@ export const ReservationListPage: React.FC = () => {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-xs">
         {error ? (
-          <div className="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
+          <div className="border-b border-rose-200 bg-rose-50 px-5 py-3.5 text-xs font-bold text-rose-700">{error}</div>
         ) : null}
 
         <div className="overflow-x-auto">
-          <table className="min-w-[900px] w-full text-sm">
-            <thead className="bg-slate-100 text-slate-600">
+          <table className="min-w-[850px] w-full text-left border-collapse">
+            <thead className="bg-slate-50/80 border-b border-slate-200/70 text-xs font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">รหัสการจอง</th>
-                <th className="px-4 py-3 text-left font-semibold">ผู้เช่า</th>
-                <th className="px-4 py-3 text-left font-semibold">เลขแผง</th>
-                <th className="px-4 py-3 text-left font-semibold">วันที่จอง</th>
-                <th className="px-4 py-3 text-left font-semibold">ค่าเช่า</th>
-                <th className="px-4 py-3 text-left font-semibold">สถานะ</th>
-                <th className="px-4 py-3 text-left font-semibold">จัดการ</th>
+                <th className="px-6 py-4">ผู้เช่า / ติดต่อ</th>
+                <th className="px-6 py-4">โซน / เลขแผง</th>
+                <th className="px-6 py-4">วันที่ทำรายการ</th>
+                <th className="px-6 py-4">ยอดเงินมัดจำ</th>
+                <th className="px-6 py-4">สถานะ</th>
+                <th className="px-6 py-4 text-center">จัดการ</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-xs font-semibold text-slate-400">
                     กำลังโหลดข้อมูลรายการจอง...
                   </td>
                 </tr>
               ) : currentReservations.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-xs font-semibold text-slate-400">
                     ไม่พบรายการจองตามเงื่อนไขที่เลือก
                   </td>
                 </tr>
               ) : (
                 currentReservations.map((item) => (
-                  <tr key={item.id} className="border-t border-slate-200 bg-white">
-                    <td className="px-4 py-3 font-medium text-slate-900">{item.bookingId}</td>
-                    <td className="px-4 py-3">
+                  <tr key={item.id} className="group transition-colors hover:bg-blue-50/30">
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 font-extrabold text-sm text-white shadow-xs">
                           {item.tenantAvatar}
                         </div>
-                        <span className="text-slate-700">{item.tenantName}</span>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{item.tenantName}</p>
+                          <p className="text-xs text-slate-400">{item.phone}</p>
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                        {item.stallNumber}
-                      </span>
+                    <td className="px-6 py-4">
+                      <div className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-xs font-extrabold text-slate-800 border border-slate-200/60">
+                        <span className="text-slate-400">{item.zoneName || 'ทั่วไป'}</span>
+                        <span className="text-blue-600 font-black">{item.stallNumber}</span>
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{item.bookingDate}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-800">{item.depositAmount.toLocaleString()}</td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-3 py-1 text-sm font-semibold ${statusStyles[item.status]}`}>
+                    <td className="px-6 py-4 text-xs font-medium text-slate-600">{item.bookingDate}</td>
+                    <td className="px-6 py-4 font-mono font-bold text-slate-900 text-sm">
+                      ฿{item.depositAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold ${statusStyles[item.status]}`}>
                         {statusLabel[item.status]}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
                         <ActionButton
                           type="view"
                           onClick={() => setSelectedReservation(item)}
                           title="ดูรายละเอียด"
                         />
-                        <button
-                          onClick={() => void handleStatusChange(item.id, 'approved')}
-                          className="rounded-full bg-emerald-50 p-2 text-emerald-600 transition hover:bg-emerald-100"
-                          aria-label="อนุมัติ"
-                        >
-                          <CheckCircle2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => void handleStatusChange(item.id, 'rejected')}
-                          className="rounded-full bg-rose-50 p-2 text-rose-600 transition hover:bg-rose-100"
-                          aria-label="ไม่อนุมัติ"
-                        >
-                          <XCircle className="h-4 w-4" />
-                        </button>
+                        {item.status === 'refund_requested' || item.status === 'refunded' ? (
+                          <button
+                            onClick={() => navigate(`/payments?status=${item.status}`)}
+                            className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-100 text-purple-700 hover:bg-purple-600 hover:text-white transition shadow-xs active:scale-95 cursor-pointer"
+                            title="ไปยังหน้าโอนเงินคืนออนไลน์ (Payments)"
+                          >
+                            <Receipt className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => void handleStatusChange(item.id, 'approved')}
+                              className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition shadow-xs active:scale-95 cursor-pointer"
+                              aria-label="อนุมัติ"
+                              title="อนุมัติคำขอ"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => void handleStatusChange(item.id, 'rejected')}
+                              className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition shadow-xs active:scale-95 cursor-pointer"
+                              aria-label="ไม่อนุมัติ"
+                              title="ไม่อนุมัติคำขอ"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -446,91 +616,90 @@ export const ReservationListPage: React.FC = () => {
           </table>
         </div>
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-white p-4">
-            <button
-              onClick={() => setCurrentPage((current) => Math.max(1, current - 1))}
-              disabled={activePage === 1}
-              className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+        {filteredReservations.length > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-t border-slate-100 bg-slate-50/50 px-6 py-4 text-xs font-medium text-slate-500 gap-3">
+            <span>
+              แสดงสูงสุด {itemsPerPage} คนต่อหน้า (หน้า {activePage} จากทั้งหมด {totalPages} หน้า - ทั้งหมด {filteredReservations.length} รายการ)
+            </span>
+            <div className="flex items-center gap-1.5">
               <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                className={`h-9 w-9 rounded-full text-sm font-medium transition ${
-                  activePage === page ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
+                onClick={() => setCurrentPage((current) => Math.max(1, current - 1))}
+                disabled={activePage === 1}
+                className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 shadow-2xs"
               >
-                {page}
+                <ChevronLeft className="h-4 w-4" />
               </button>
-            ))}
-            <button
-              onClick={() => setCurrentPage((current) => Math.min(totalPages, current + 1))}
-              disabled={activePage === totalPages}
-              className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`h-8 w-8 rounded-xl text-xs font-bold transition shadow-2xs ${
+                    activePage === page
+                      ? 'bg-blue-600 text-white font-black'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage((current) => Math.min(totalPages, current + 1))}
+                disabled={activePage === totalPages}
+                className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-100 transition disabled:opacity-40 shadow-2xs"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
       </section>
 
       {selectedReservation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-          <div className="w-full max-w-5xl rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between rounded-t-3xl bg-sky-700 px-6 py-4 text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl space-y-0 animate-in zoom-in-95 duration-200 custom-scrollbar">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-900 px-6 py-4 text-white">
               <div className="flex items-center gap-3">
-                <div className="rounded-full bg-white/20 p-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-md">
                   <FileText className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">รายละเอียดการจอง</h3>
-                  <p className="text-sm text-sky-100">ตรวจสอบข้อมูลและจัดการสถานะคำขอจอง</p>
+                  <h3 className="text-base font-bold">รายละเอียดการจองแผงค้า</h3>
+                  <p className="text-xs text-slate-400">ตรวจสอบรายละเอียดและจัดการอนุมัติคำขอจอง</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedReservation(null)} className="rounded-full p-2 transition hover:bg-sky-800">
+              <button onClick={() => setSelectedReservation(null)} className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition">
                 <XCircle className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="grid gap-6 p-6 lg:grid-cols-[0.95fr_1.05fr]">
-              <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">เลขที่บิล</p>
-                    <p className="mt-1 text-base font-semibold text-slate-900">{selectedReservation.bookingId}</p>
+            <div className="grid gap-6 p-6 lg:grid-cols-2">
+              <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-5">
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
+                    <p className="text-xs font-bold text-slate-400">ชื่อผู้จอง</p>
+                    <p className="mt-1 text-sm font-extrabold text-slate-900">{selectedReservation.tenantName}</p>
                   </div>
-                  <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">ชื่อผู้จอง</p>
-                    <p className="mt-1 text-base font-semibold text-slate-900">{selectedReservation.tenantName}</p>
+                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
+                    <p className="text-xs font-bold text-slate-400">เบอร์โทรศัพท์</p>
+                    <p className="mt-1 text-sm font-bold text-slate-900">{selectedReservation.phone}</p>
                   </div>
-                  <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">อีเมล</p>
-                    <p className="mt-1 text-base font-semibold text-slate-900 break-all">{selectedReservation.email}</p>
+                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60 col-span-2">
+                    <p className="text-xs font-bold text-slate-400">อีเมล</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800 break-all">{selectedReservation.email}</p>
                   </div>
-                  <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">เบอร์โทรศัพท์</p>
-                    <p className="mt-1 text-base font-semibold text-slate-900">{selectedReservation.phone}</p>
-                  </div>
-                  <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">โซนตลาด / เลขแผงค้า</p>
-                    <p className="mt-1 text-base font-semibold text-slate-900">
-                      {selectedReservation.zoneName || 'ทั่วไป'} / <span className="text-sky-600 font-bold">{selectedReservation.stallNumber}</span>
+                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
+                    <p className="text-xs font-bold text-slate-400">โซน / เลขแผงค้า</p>
+                    <p className="mt-1 text-sm font-black text-blue-600">
+                      {selectedReservation.zoneName || 'ทั่วไป'} - {selectedReservation.stallNumber}
                     </p>
                   </div>
-                  <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">ขนาดแผงค้า</p>
-                    <p className="mt-1 text-base font-semibold text-slate-900">{selectedReservation.stallSize || 'ไม่ได้ระบุ'}</p>
+                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
+                    <p className="text-xs font-bold text-slate-400">ขนาดแผงค้า</p>
+                    <p className="mt-1 text-sm font-bold text-slate-800">{selectedReservation.stallSize || 'ไม่ได้ระบุ'}</p>
                   </div>
-                  <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">วันที่ทำรายการ</p>
-                    <p className="mt-1 text-base font-semibold text-slate-900">{selectedReservation.bookingDate}</p>
-                  </div>
-                  <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">ระยะเวลาเช่าแผง</p>
-                    <p className="mt-1 text-base font-semibold text-slate-900">
+                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60 col-span-2">
+                    <p className="text-xs font-bold text-slate-400">ระยะเวลาเช่าแผง</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
                       {selectedReservation.startDate && selectedReservation.endDate
                         ? `${formatBookingDate(selectedReservation.startDate)} ถึง ${formatBookingDate(selectedReservation.endDate)}`
                         : '-'}
@@ -538,68 +707,106 @@ export const ReservationListPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="text-sm text-emerald-700">ยอดชำระ</p>
-                  <p className="mt-2 text-3xl font-semibold text-emerald-700">{selectedReservation.depositAmount.toLocaleString()} บาท</p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="mb-4 flex items-center gap-2">
-                  <div className="rounded-full bg-amber-100 p-2 text-amber-700">
-                    <Receipt className="h-5 w-5" />
-                  </div>
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 flex items-center justify-between">
                   <div>
-                    <h4 className="text-lg font-semibold text-slate-900">หลักฐานการโอน ค่ามัดจำ</h4>
-                    <p className="text-sm text-slate-500">ภาพสลิปที่ผู้จองแนบมา</p>
+                    <p className="text-xs font-bold text-emerald-800">ยอดชำระเงินมัดจำ</p>
+                    <p className="mt-0.5 text-2xl font-black text-emerald-700 font-mono">฿{selectedReservation.depositAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</p>
                   </div>
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold ${statusStyles[selectedReservation.status]}`}>
+                    {statusLabel[selectedReservation.status]}
+                  </span>
                 </div>
 
-                {selectedReservation.proofImage ? (
-                  <img
-                    src={selectedReservation.proofImage}
-                    alt="หลักฐานการโอน"
-                    className="h-72 w-full rounded-2xl border border-slate-200 object-cover"
-                  />
-                ) : (
-                  <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-400">
-                    ไม่มีหลักฐานการโอน
+                {selectedReservation.rejectReason && (
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4">
+                    <p className="text-xs font-bold text-rose-800">เหตุผลที่ไม่อนุมัติ / ยกเลิก</p>
+                    <p className="mt-1 text-xs font-semibold text-rose-700">{selectedReservation.rejectReason}</p>
+                  </div>
+                )}
+
+                {selectedReservation.refundReason && (
+                  <div className="rounded-2xl border border-purple-200 bg-purple-50/80 p-4 space-y-1.5 text-xs text-purple-900">
+                    <p className="font-extrabold text-purple-900">ข้อมูลการขอคืนเงิน (Refund Details)</p>
+                    <p><span className="font-bold text-purple-700">เหตุผล:</span> {selectedReservation.refundReason}</p>
+                    <p><span className="font-bold text-purple-700">ธนาคาร:</span> {selectedReservation.refundBankName || '-'} ({selectedReservation.refundAccountNumber || '-'})</p>
+                    <p><span className="font-bold text-purple-700">ชื่อบัญชี:</span> {selectedReservation.refundAccountName || '-'}</p>
                   </div>
                 )}
               </div>
-            </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-4 sm:flex-row sm:justify-end">
-              <button
-                onClick={() => {
-                  handleStatusChange(selectedReservation.id, 'pending');
-                  setSelectedReservation(null);
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-300"
-              >
-                <Clock3 className="h-4 w-4" />
-                รอตรวจสอบเพิ่มเติม
-              </button>
-              <button
-                onClick={() => {
-                  handleStatusChange(selectedReservation.id, 'rejected');
-                  setSelectedReservation(null);
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700"
-              >
-                <XCircle className="h-4 w-4" />
-                ไม่อนุมัติ
-              </button>
-              <button
-                onClick={() => {
-                  handleStatusChange(selectedReservation.id, 'approved');
-                  setSelectedReservation(null);
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                อนุมัติ
-              </button>
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-5 flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                      <Receipt className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">หลักฐานการโอนเงิน (สลิป)</h4>
+                      <p className="text-xs text-slate-400">รูปภาพสลิปที่ผู้จองแนบเข้ามาในระบบ</p>
+                    </div>
+                  </div>
+
+                  {selectedReservation.proofImage ? (
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 flex justify-center p-2">
+                      <img
+                        src={selectedReservation.proofImage}
+                        alt="หลักฐานการโอน"
+                        className="max-h-[280px] rounded-xl object-contain shadow-xs"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex h-56 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
+                      ไม่มีหลักฐานการโอน
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 pt-3 border-t border-slate-100">
+                  {selectedReservation.status === 'refund_requested' || selectedReservation.status === 'refunded' ? (
+                    <button
+                      onClick={() => {
+                        const targetStatus = selectedReservation.status;
+                        setSelectedReservation(null);
+                        navigate(`/payments?status=${targetStatus}`);
+                      }}
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 px-5 py-3 text-xs font-extrabold text-white shadow-md hover:from-purple-800 hover:to-indigo-800 transition active:scale-98 cursor-pointer"
+                    >
+                      <Receipt className="h-4.5 w-4.5" />
+                      ไปที่หน้าโอนเงินคืนออนไลน์ (Online Refund Portal)
+                    </button>
+                  ) : (
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          handleStatusChange(selectedReservation.id, 'pending');
+                          setSelectedReservation(null);
+                        }}
+                        className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+                      >
+                        รอตรวจสอบ
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleStatusChange(selectedReservation.id, 'rejected');
+                          setSelectedReservation(null);
+                        }}
+                        className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 transition"
+                      >
+                        ไม่อนุมัติ
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleStatusChange(selectedReservation.id, 'approved');
+                          setSelectedReservation(null);
+                        }}
+                        className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition"
+                      >
+                        อนุมัติการจอง
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1209,7 +1416,7 @@ export const ReportsPage: React.FC = () => {
           time: item.report_date ? new Date(item.report_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '-',
           rawDate: item.report_date || null,
           status: item.status || 'pending',
-          image: item.image ? (item.image.startsWith('/storage/') || item.image.startsWith('/assets/') || item.image.startsWith('http') ? item.image : `/api/images/${item.image}`) : undefined,
+          image: formatImageUrl(item.image),
           priority: 'medium',
           reporter: item.user_name || 'ไม่ระบุ',
           adminNote: item.admin_note || '',
@@ -1654,6 +1861,8 @@ export const AnnouncementsPage: React.FC = () => {
     image: '',
   });
 
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+
   const categoryOptions = [
     { label: 'ทั้งหมด', value: 'all' },
     { label: 'ประกาศด่วน', value: 'urgent' },
@@ -1680,7 +1889,7 @@ export const AnnouncementsPage: React.FC = () => {
           id: String(item.announcement_id),
           title: item.title || '',
           description: item.description || '',
-          image: item.image || '',
+          image: formatImageUrl(item.image) || '',
           date: formatAnnouncementDate(item.publish_date),
           rawDate: item.publish_date || null,
           status: item.status === 'active' ? 'active' : 'inactive',
@@ -1760,6 +1969,7 @@ export const AnnouncementsPage: React.FC = () => {
 
   const resetForm = () => {
     setForm({ title: '', description: '', category: 'general', status: 'active', image: '' });
+    setSelectedImageFile(null);
   };
 
   const openCreateModal = () => {
@@ -1780,6 +1990,7 @@ export const AnnouncementsPage: React.FC = () => {
 
   const openEditModal = (item: Announcement) => {
     setSelectedAnnouncement(item);
+    setSelectedImageFile(null);
     setForm({
       title: item.title,
       description: item.description,
@@ -1805,23 +2016,28 @@ export const AnnouncementsPage: React.FC = () => {
     if (!form.title.trim()) return;
 
     try {
-      const payload = {
-        title: form.title,
-        description: form.description,
-        announcement_type: form.category === 'event' ? 'activity' : form.category,
-        status: form.status,
-        user_id: 1,
-      };
+      const formPayload = new FormData();
+      formPayload.append('title', form.title);
+      formPayload.append('description', form.description || '');
+      const categoryVal = form.category === 'event' ? 'activity' : (form.category || 'general');
+      formPayload.append('announcement_type', categoryVal);
+      formPayload.append('status', form.status);
+      formPayload.append('user_id', '1');
+
+      if (selectedImageFile) {
+        formPayload.append('image', selectedImageFile);
+      } else if (form.image && !form.image.startsWith('blob:')) {
+        formPayload.append('image', form.image || '');
+      }
 
       const url = isEditOpen && selectedAnnouncement
         ? `/api/v1/admin/announcements/${selectedAnnouncement.id}`
         : '/api/v1/admin/announcements';
-      const method = isEditOpen && selectedAnnouncement ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(payload),
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+        body: formPayload,
       });
 
       if (!response.ok) {
@@ -1872,6 +2088,7 @@ export const AnnouncementsPage: React.FC = () => {
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setSelectedImageFile(file);
       const previewUrl = URL.createObjectURL(file);
       setForm((current) => ({ ...current, image: previewUrl }));
     }

@@ -3,6 +3,7 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Download, FileText, Maximize2,
 import { mockSellers, mockNewSellerApplications } from '../data/mockData';
 import { ActionButton } from '../components/common';
 import type { Seller, NewSellerApplication } from '../types';
+import { formatImageUrl } from '../utils/imageUtils';
 
 type VendorView = 'all' | 'new';
 
@@ -100,9 +101,9 @@ const SellersPage: React.FC = () => {
           citizen_id: item.citizen_id ?? '-',
           current_stalls: Array.isArray(item.current_stalls) ? item.current_stalls : [],
           status: item.status === 'active' ? 'active' : 'inactive',
-          avatar: item.avatar ?? buildAvatarUrl(item.name ?? item.username ?? 'Seller'),
-          document_url: item.document_url ?? null,
-          document_image: item.document_image ?? null,
+          avatar: formatImageUrl(item.avatar) ?? buildAvatarUrl(item.name ?? item.username ?? 'Seller'),
+          document_url: formatImageUrl(item.document_url) ?? null,
+          document_image: formatImageUrl(item.document_image) ?? null,
         }));
 
         setSellers(mappedSellers);
@@ -153,11 +154,11 @@ const SellersPage: React.FC = () => {
           phone: item.phone ?? '-',
           email: item.email ?? '-',
           address: item.address ?? '-',
-          avatar: item.avatar ?? buildAvatarUrl(item.name ?? item.username ?? 'Seller'),
+          avatar: formatImageUrl(item.avatar) ?? buildAvatarUrl(item.name ?? item.username ?? 'Seller'),
           submission_date: item.submission_date ?? item.created_at ?? '-',
           status: item.document_status === 'approved' ? 'approved' : item.document_status === 'rejected' ? 'rejected' : 'pending',
-          document_url: item.document_url ?? null,
-          document_image: item.document_image ?? null,
+          document_url: formatImageUrl(item.document_url) ?? null,
+          document_image: formatImageUrl(item.document_image) ?? null,
         }));
 
         setApplications(mappedApplications);
@@ -265,6 +266,7 @@ const SellersPage: React.FC = () => {
       setSellers((current) => current.map((seller) => (seller.id === id ? { ...seller, status: status === 'approved' ? 'active' : 'inactive' } : seller)));
       setSelectedApplication(null);
       setCitizenIdInput('');
+      window.dispatchEvent(new Event('refresh-badges'));
     } catch (err: any) {
       alert(err.message || 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
     }

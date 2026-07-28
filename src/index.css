@@ -106,6 +106,34 @@
     @apply transition-all duration-300 ease-out;
   }
   .card-hover:hover {
-    @apply -translate-y-0.5 shadow-lg;
+    @apply -translate-y-1 shadow-xl shadow-slate-200/60;
   }
+}
+
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+.animate-float-slow {
+  animation: floatSlow 3.5s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.5s ease-in-out infinite;
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, Download, Filter } from 'lucide-react';
 import { mockOrders } from '../data/mockData';
 import type { Order } from '../types';
+import { formatImageUrl } from '../utils/imageUtils';
 
 const OrdersPage: React.FC = () => {
   const [orders] = useState<Order[]>(mockOrders);
@@ -89,8 +90,9 @@ const OrdersPage: React.FC = () => {
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{order.orderId}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
+
                       <img
-                        src={order.seller.avatar}
+                        src={formatImageUrl(order.seller.avatar)}
                         alt={order.seller.name}
                         className="w-8 h-8 rounded-full object-cover"
                       />

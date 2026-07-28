@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 interface BadgeCounts {
   verifications: number;
   reports: number;
+  sellers: number;
 }
 
 /**
@@ -10,7 +11,7 @@ interface BadgeCounts {
  * refreshed at a configurable interval (default 30 s).
  */
 export function useBadgeCounts(intervalMs = 30_000) {
-  const [counts, setCounts] = useState<BadgeCounts>({ verifications: 0, reports: 0 });
+  const [counts, setCounts] = useState<BadgeCounts>({ verifications: 0, reports: 0, sellers: 0 });
 
   const fetchCounts = useCallback(async () => {
     try {
@@ -24,6 +25,7 @@ export function useBadgeCounts(intervalMs = 30_000) {
         setCounts({
           verifications: Number(data.verifications) || 0,
           reports: Number(data.reports) || 0,
+          sellers: Number(data.sellers) || 0,
         });
       }
     } catch {
