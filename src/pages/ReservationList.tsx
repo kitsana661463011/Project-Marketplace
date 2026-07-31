@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Bold,
@@ -52,6 +53,12 @@ interface ReservationItem {
   refundAccountName?: string;
   refundSlip?: string;
   refundedAt?: string;
+  rentalType?: 'daily' | 'monthly';
+  dailyPrice?: number;
+  monthlyPrice?: number;
+  entryFee?: number;
+  securityDeposit?: number;
+  totalAmount?: number;
 }
 
 interface BookingApiItem {
@@ -81,6 +88,17 @@ interface BookingApiItem {
   refund_account_name?: string | null;
   refund_slip?: string | null;
   refunded_at?: string | null;
+  rental_type?: 'daily' | 'monthly' | null;
+  daily_price?: number | null;
+  monthly_price?: number | null;
+  entry_fee?: number | null;
+  security_deposit?: number | null;
+  total_amount?: number | null;
+  stall_rental_type?: 'daily' | 'monthly' | null;
+  stall_daily_price?: number | null;
+  stall_monthly_price?: number | null;
+  stall_entry_fee?: number | null;
+  stall_security_deposit?: number | null;
 }
 
 const formatImageUrl = (path?: string | null) => {
@@ -128,6 +146,8 @@ const mapBookingApiItem = (item: BookingApiItem): ReservationItem => {
       ? item.payment_status
       : item.status;
 
+  const mappedRentalType = (item.rental_type || item.stall_rental_type || 'daily') as 'daily' | 'monthly';
+
   return {
     id: item.booking_id,
     bookingId: String(item.booking_id).padStart(6, '0'),
@@ -152,6 +172,12 @@ const mapBookingApiItem = (item: BookingApiItem): ReservationItem => {
     refundAccountName: item.refund_account_name || undefined,
     refundSlip: formatImageUrl(item.refund_slip),
     refundedAt: item.refunded_at ? formatBookingDate(item.refunded_at) : undefined,
+    rentalType: mappedRentalType,
+    dailyPrice: Number(item.daily_price ?? item.stall_daily_price ?? 0),
+    monthlyPrice: Number(item.monthly_price ?? item.stall_monthly_price ?? 0),
+    entryFee: Number(item.entry_fee ?? item.stall_entry_fee ?? 0),
+    securityDeposit: Number(item.security_deposit ?? item.stall_security_deposit ?? 0),
+    totalAmount: Number(item.total_amount ?? item.amount ?? 0),
   };
 };
 
@@ -388,7 +414,18 @@ export const ReservationListPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="รายการจอง" />
+      {/* ── Sleek Compact Header ── */}
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between pb-2 border-b border-slate-200/60">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+            <FileText className="h-7 w-7 text-blue-600" />
+            <span>รายการจองแผงค้า</span>
+          </h1>
+          <p className="text-xs font-semibold text-slate-500 mt-0.5">
+            ตรวจสอบรายละเอียดคำขอจอง อนุมัติสัญญาเช่า และอนุมัติหลักฐานการชำระเงิน
+          </p>
+        </div>
+      </div>
 
       {/* ── Summary KPI Overview Cards ── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -472,8 +509,8 @@ export const ReservationListPage: React.FC = () => {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="ค้นหา"
-              className="w-full border-none bg-transparent outline-none placeholder:text-slate-400"
+              placeholder="ค้นหาชื่อผู้จอง, เบอร์โทร หรือเลขแผงค้า..."
+              className="w-full border-none bg-transparent outline-none placeholder:text-slate-400 font-medium"
             />
           </label>
 
@@ -484,15 +521,15 @@ export const ReservationListPage: React.FC = () => {
                 type="date"
                 value={startDate}
                 onChange={(event) => setStartDate(event.target.value)}
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm outline-none"
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm outline-none font-medium"
               />
             </div>
-            <span className="text-slate-400">ถึง</span>
+            <span className="text-slate-400 font-bold">ถึง</span>
             <input
               type="date"
               value={endDate}
               onChange={(event) => setEndDate(event.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm outline-none"
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm outline-none font-medium"
             />
           </div>
 
@@ -500,7 +537,7 @@ export const ReservationListPage: React.FC = () => {
             <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as ReservationStatus | 'all')}
-              className="appearance-none bg-transparent pr-6 outline-none"
+              className="appearance-none bg-transparent pr-6 outline-none font-bold"
             >
               {statusOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -587,7 +624,7 @@ export const ReservationListPage: React.FC = () => {
                           >
                             <Receipt className="h-4 w-4" />
                           </button>
-                        ) : (
+                        ) : item.status === 'pending' ? (
                           <>
                             <button
                               onClick={() => void handleStatusChange(item.id, 'approved')}
@@ -606,7 +643,7 @@ export const ReservationListPage: React.FC = () => {
                               <XCircle className="h-4 w-4" />
                             </button>
                           </>
-                        )}
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -654,163 +691,218 @@ export const ReservationListPage: React.FC = () => {
         )}
       </section>
 
-      {selectedReservation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl space-y-0 animate-in zoom-in-95 duration-200 custom-scrollbar">
-            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-900 px-6 py-4 text-white">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-md">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold">รายละเอียดการจองแผงค้า</h3>
-                  <p className="text-xs text-slate-400">ตรวจสอบรายละเอียดและจัดการอนุมัติคำขอจอง</p>
-                </div>
-              </div>
-              <button onClick={() => setSelectedReservation(null)} className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition">
-                <XCircle className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="grid gap-6 p-6 lg:grid-cols-2">
-              <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-5">
-                <div className="grid gap-3.5 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
-                    <p className="text-xs font-bold text-slate-400">ชื่อผู้จอง</p>
-                    <p className="mt-1 text-sm font-extrabold text-slate-900">{selectedReservation.tenantName}</p>
+      {/* ── Details Modal Popup ── */}
+      {selectedReservation &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white shadow-2xl space-y-0 animate-in zoom-in-95 duration-200 custom-scrollbar">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-900 px-6 py-4 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-md">
+                    <FileText className="h-5 w-5" />
                   </div>
-                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
-                    <p className="text-xs font-bold text-slate-400">เบอร์โทรศัพท์</p>
-                    <p className="mt-1 text-sm font-bold text-slate-900">{selectedReservation.phone}</p>
-                  </div>
-                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60 col-span-2">
-                    <p className="text-xs font-bold text-slate-400">อีเมล</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800 break-all">{selectedReservation.email}</p>
-                  </div>
-                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
-                    <p className="text-xs font-bold text-slate-400">โซน / เลขแผงค้า</p>
-                    <p className="mt-1 text-sm font-black text-blue-600">
-                      {selectedReservation.zoneName || 'ทั่วไป'} - {selectedReservation.stallNumber}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
-                    <p className="text-xs font-bold text-slate-400">ขนาดแผงค้า</p>
-                    <p className="mt-1 text-sm font-bold text-slate-800">{selectedReservation.stallSize || 'ไม่ได้ระบุ'}</p>
-                  </div>
-                  <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60 col-span-2">
-                    <p className="text-xs font-bold text-slate-400">ระยะเวลาเช่าแผง</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800">
-                      {selectedReservation.startDate && selectedReservation.endDate
-                        ? `${formatBookingDate(selectedReservation.startDate)} ถึง ${formatBookingDate(selectedReservation.endDate)}`
-                        : '-'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-bold text-emerald-800">ยอดชำระเงินมัดจำ</p>
-                    <p className="mt-0.5 text-2xl font-black text-emerald-700 font-mono">฿{selectedReservation.depositAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</p>
+                    <h3 className="text-base font-bold">รายละเอียดการจองแผงค้า</h3>
+                    <p className="text-xs text-slate-400">ตรวจสอบรายละเอียดสัญญาและหลักฐานการชำระเงิน</p>
                   </div>
-                  <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold ${statusStyles[selectedReservation.status]}`}>
-                    {statusLabel[selectedReservation.status]}
-                  </span>
                 </div>
-
-                {selectedReservation.rejectReason && (
-                  <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4">
-                    <p className="text-xs font-bold text-rose-800">เหตุผลที่ไม่อนุมัติ / ยกเลิก</p>
-                    <p className="mt-1 text-xs font-semibold text-rose-700">{selectedReservation.rejectReason}</p>
-                  </div>
-                )}
-
-                {selectedReservation.refundReason && (
-                  <div className="rounded-2xl border border-purple-200 bg-purple-50/80 p-4 space-y-1.5 text-xs text-purple-900">
-                    <p className="font-extrabold text-purple-900">ข้อมูลการขอคืนเงิน (Refund Details)</p>
-                    <p><span className="font-bold text-purple-700">เหตุผล:</span> {selectedReservation.refundReason}</p>
-                    <p><span className="font-bold text-purple-700">ธนาคาร:</span> {selectedReservation.refundBankName || '-'} ({selectedReservation.refundAccountNumber || '-'})</p>
-                    <p><span className="font-bold text-purple-700">ชื่อบัญชี:</span> {selectedReservation.refundAccountName || '-'}</p>
-                  </div>
-                )}
+                <button onClick={() => setSelectedReservation(null)} className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition">
+                  <XCircle className="h-5 w-5" />
+                </button>
               </div>
 
-              <div className="rounded-2xl border border-slate-200/80 bg-white p-5 flex flex-col justify-between space-y-4">
-                <div>
-                  <div className="mb-3 flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                      <Receipt className="h-4 w-4" />
+              <div className="grid gap-6 p-6 lg:grid-cols-2">
+                {/* Left Column: Tenant & Rental Contract Info */}
+                <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-5">
+                  <div className="grid gap-3.5 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
+                      <p className="text-xs font-bold text-slate-400">ชื่อผู้จอง</p>
+                      <p className="mt-1 text-sm font-extrabold text-slate-900">{selectedReservation.tenantName}</p>
                     </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">หลักฐานการโอนเงิน (สลิป)</h4>
-                      <p className="text-xs text-slate-400">รูปภาพสลิปที่ผู้จองแนบเข้ามาในระบบ</p>
+                    <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
+                      <p className="text-xs font-bold text-slate-400">เบอร์โทรศัพท์</p>
+                      <p className="mt-1 text-sm font-bold text-slate-900">{selectedReservation.phone}</p>
+                    </div>
+                    <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60 col-span-2">
+                      <p className="text-xs font-bold text-slate-400">อีเมล</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800 break-all">{selectedReservation.email}</p>
+                    </div>
+                    <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
+                      <p className="text-xs font-bold text-slate-400">โซน / เลขแผงค้า</p>
+                      <p className="mt-1 text-sm font-black text-blue-600">
+                        {selectedReservation.zoneName || 'ทั่วไป'} - {selectedReservation.stallNumber}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60">
+                      <p className="text-xs font-bold text-slate-400">ขนาดแผงค้า</p>
+                      <p className="mt-1 text-sm font-bold text-slate-800">{selectedReservation.stallSize || 'ไม่ได้ระบุ'}</p>
+                    </div>
+                    <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60 col-span-2">
+                      <p className="text-xs font-bold text-slate-400">รูปแบบการเช่า</p>
+                      <p className="mt-1 text-sm font-extrabold text-indigo-700">
+                        {selectedReservation.rentalType === 'monthly' ? '📆 เช่ารายเดือน (Monthly)' : '📅 เช่ารายวัน (Daily)'}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-white p-3.5 shadow-2xs border border-slate-200/60 col-span-2">
+                      <p className="text-xs font-bold text-slate-400">ระยะเวลาเช่าแผง</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {selectedReservation.startDate && selectedReservation.endDate
+                          ? `${formatBookingDate(selectedReservation.startDate)} ถึง ${formatBookingDate(selectedReservation.endDate)}`
+                          : '-'}
+                      </p>
                     </div>
                   </div>
 
-                  {selectedReservation.proofImage ? (
-                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 flex justify-center p-2">
-                      <img
-                        src={selectedReservation.proofImage}
-                        alt="หลักฐานการโอน"
-                        className="max-h-[280px] rounded-xl object-contain shadow-xs"
-                      />
+                  {/* ── Itemized Fee Breakdown Card ── */}
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-indigo-100/80 pb-2">
+                      <span className="text-xs font-black uppercase text-indigo-900 tracking-wider">
+                        รายละเอียดค่าบริการ & ยอดรวม
+                      </span>
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-0.5 text-xs font-bold ${statusStyles[selectedReservation.status]}`}>
+                        {statusLabel[selectedReservation.status]}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="flex h-56 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
-                      ไม่มีหลักฐานการโอน
+
+                    {selectedReservation.rentalType === 'monthly' ? (
+                      <div className="space-y-1.5 text-xs font-bold text-slate-700">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">ค่าเช่ารายเดือน:</span>
+                          <span className="font-mono text-slate-900">฿{(selectedReservation.monthlyPrice || 0).toLocaleString()} / เดือน</span>
+                        </div>
+                        {(selectedReservation.entryFee ?? 0) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">ค่าธรรมเนียมแรกเข้า:</span>
+                            <span className="font-mono text-slate-900">฿{(selectedReservation.entryFee || 0).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {(selectedReservation.securityDeposit ?? 0) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">เงินประกันแผงค้า:</span>
+                            <span className="font-mono text-slate-900">฿{(selectedReservation.securityDeposit || 0).toLocaleString()}</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 text-xs font-bold text-slate-700">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">ค่าเช่ารายวัน:</span>
+                          <span className="font-mono text-slate-900">฿{(selectedReservation.dailyPrice || selectedReservation.depositAmount || 0).toLocaleString()} / วัน</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-2 border-t border-indigo-200/80">
+                      <span className="text-xs font-black text-indigo-950 uppercase tracking-wider">ยอดเงินรวมสุทธิ</span>
+                      <span className="text-2xl font-black text-emerald-600 font-mono">
+                        ฿{(selectedReservation.totalAmount || selectedReservation.depositAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {selectedReservation.rejectReason && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4">
+                      <p className="text-xs font-bold text-rose-800">เหตุผลที่ไม่อนุมัติ / ยกเลิก</p>
+                      <p className="mt-1 text-xs font-semibold text-rose-700">{selectedReservation.rejectReason}</p>
+                    </div>
+                  )}
+
+                  {selectedReservation.refundReason && (
+                    <div className="rounded-2xl border border-purple-200 bg-purple-50/80 p-4 space-y-1.5 text-xs text-purple-900">
+                      <p className="font-extrabold text-purple-900">ข้อมูลการขอคืนเงิน (Refund Details)</p>
+                      <p><span className="font-bold text-purple-700">เหตุผล:</span> {selectedReservation.refundReason}</p>
+                      <p><span className="font-bold text-purple-700">ธนาคาร:</span> {selectedReservation.refundBankName || '-'} ({selectedReservation.refundAccountNumber || '-'})</p>
+                      <p><span className="font-bold text-purple-700">ชื่อบัญชี:</span> {selectedReservation.refundAccountName || '-'}</p>
                     </div>
                   )}
                 </div>
 
-                <div className="flex flex-col gap-2 pt-3 border-t border-slate-100">
-                  {selectedReservation.status === 'refund_requested' || selectedReservation.status === 'refunded' ? (
-                    <button
-                      onClick={() => {
-                        const targetStatus = selectedReservation.status;
-                        setSelectedReservation(null);
-                        navigate(`/payments?status=${targetStatus}`);
-                      }}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 px-5 py-3 text-xs font-extrabold text-white shadow-md hover:from-purple-800 hover:to-indigo-800 transition active:scale-98 cursor-pointer"
-                    >
-                      <Receipt className="h-4.5 w-4.5" />
-                      ไปที่หน้าโอนเงินคืนออนไลน์ (Online Refund Portal)
-                    </button>
-                  ) : (
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          handleStatusChange(selectedReservation.id, 'pending');
-                          setSelectedReservation(null);
-                        }}
-                        className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
-                      >
-                        รอตรวจสอบ
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleStatusChange(selectedReservation.id, 'rejected');
-                          setSelectedReservation(null);
-                        }}
-                        className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 transition"
-                      >
-                        ไม่อนุมัติ
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleStatusChange(selectedReservation.id, 'approved');
-                          setSelectedReservation(null);
-                        }}
-                        className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition"
-                      >
-                        อนุมัติการจอง
-                      </button>
+                {/* Right Column: Slip & Action Buttons */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-5 flex flex-col justify-between space-y-4">
+                  <div>
+                    <div className="mb-3 flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                        <Receipt className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">หลักฐานการโอนเงิน (สลิป)</h4>
+                        <p className="text-xs text-slate-400">รูปภาพสลิปที่ผู้จองแนบเข้ามาในระบบ</p>
+                      </div>
                     </div>
-                  )}
+
+                    {selectedReservation.proofImage ? (
+                      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 flex justify-center p-2">
+                        <img
+                          src={selectedReservation.proofImage}
+                          alt="หลักฐานการโอน"
+                          className="max-h-[280px] rounded-xl object-contain shadow-xs"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex h-56 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
+                        ไม่มีหลักฐานการโอน
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2 pt-3 border-t border-slate-100">
+                    {selectedReservation.status === 'refund_requested' || selectedReservation.status === 'refunded' ? (
+                      <button
+                        onClick={() => {
+                          const targetStatus = selectedReservation.status;
+                          setSelectedReservation(null);
+                          navigate(`/payments?status=${targetStatus}`);
+                        }}
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 px-5 py-3 text-xs font-extrabold text-white shadow-md hover:from-purple-800 hover:to-indigo-800 transition active:scale-98 cursor-pointer"
+                      >
+                        <Receipt className="h-4.5 w-4.5" />
+                        ไปที่หน้าโอนเงินคืนออนไลน์ (Online Refund Portal)
+                      </button>
+                    ) : selectedReservation.status === 'pending' ? (
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setSelectedReservation(null)}
+                          className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                        >
+                          ยกเลิก
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleStatusChange(selectedReservation.id, 'rejected');
+                            setSelectedReservation(null);
+                          }}
+                          className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 transition cursor-pointer"
+                        >
+                          ไม่อนุมัติ
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleStatusChange(selectedReservation.id, 'approved');
+                            setSelectedReservation(null);
+                          }}
+                          className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition cursor-pointer"
+                        >
+                          อนุมัติการจอง
+                        </button>
+                      </div>
+                    ) : (
+                      /* Approved / Rejected / Read-Only View */
+                      <div className="flex items-center justify-end">
+                        <button
+                          onClick={() => setSelectedReservation(null)}
+                          className="rounded-xl border border-slate-200 bg-slate-900 px-5 py-2.5 text-xs font-bold text-white hover:bg-slate-800 transition cursor-pointer shadow-sm"
+                        >
+                          ปิดหน้าต่าง (Close)
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

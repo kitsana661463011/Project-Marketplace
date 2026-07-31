@@ -192,7 +192,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </aside>
 
       {/* Mobile Header Button */}
-      <div className="fixed left-0 right-0 top-0 z-50 flex h-16 items-center border-b border-slate-200 bg-white px-4 lg:hidden">
+      <div className="fixed left-0 right-0 top-0 z-30 flex h-16 items-center border-b border-slate-200 bg-white px-4 lg:hidden">
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
           className="rounded-lg p-2 transition-colors hover:bg-gray-100"

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Info, Save, Trash2, UploadCloud, Eye, CheckCircle2, Clock, Inbox, Receipt, XCircle, ExternalLink, CreditCard, User, FileText, ImageOff, Search, ChevronLeft, ChevronRight, Copy, Check, QrCode } from 'lucide-react';
 import { formatImageUrl } from '../utils/imageUtils';
 
@@ -20,10 +20,9 @@ const initialFormData = {
   accountNumber: '',
 };
 
-
-
 const PaymentsPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [formData, setFormData] = useState(initialFormData);
   const [selectedFileName, setSelectedFileName] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -158,48 +157,6 @@ const PaymentsPage: React.FC = () => {
     }
   };
 
-  const handleApproveBooking = async () => {
-    if (!selectedPayment?.booking_id) return;
-    try {
-      setIsRefunding(true);
-      const response = await fetch(`/api/v1/bookings/${selectedPayment.booking_id}/approve`, {
-        method: 'PUT',
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.status) {
-        throw new Error(payload.message || 'ไม่สามารถอนุมัติรายการชำระเงินได้');
-      }
-      setSuccessMessage(`อนุมัติการชำระเงินสำหรับล็อก ${selectedPayment.booking?.stall?.stall_number || ''} เรียบร้อยแล้ว`);
-      setSelectedPayment(null);
-      void loadPayments();
-    } catch (err: any) {
-      setErrorMessage(err.message || 'เกิดข้อผิดพลาดในการอนุมัติรายการ');
-    } finally {
-      setIsRefunding(false);
-    }
-  };
-
-  const handleRejectBooking = async () => {
-    if (!selectedPayment?.booking_id) return;
-    try {
-      setIsRefunding(true);
-      const response = await fetch(`/api/v1/bookings/${selectedPayment.booking_id}/reject`, {
-        method: 'PUT',
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.status) {
-        throw new Error(payload.message || 'ไม่สามารถปฏิเสธรายการได้');
-      }
-      setSuccessMessage(`ปฏิเสธรายการชำระเงินสำหรับล็อก ${selectedPayment.booking?.stall?.stall_number || ''} เรียบร้อยแล้ว`);
-      setSelectedPayment(null);
-      void loadPayments();
-    } catch (err: any) {
-      setErrorMessage(err.message || 'เกิดข้อผิดพลาดในการปฏิเสธรายการ');
-    } finally {
-      setIsRefunding(false);
-    }
-  };
-
   useEffect(() => {
     setCurrentPage(1);
   }, [statusFilter, search]);
@@ -257,9 +214,81 @@ const PaymentsPage: React.FC = () => {
       const response = await fetch('/api/v1/payments');
       if (!response.ok) throw new Error('Unable to load payments');
       const payload = await response.json();
-      setPayments(payload.data || []);
+      const list = payload.data || [];
+      setPayments(list);
+
+      const bookingIdParam = searchParams.get('booking_id');
+      const paymentIdParam = searchParams.get('payment_id');
+      const statusParam = searchParams.get('status');
+
+      if (statusParam && ['all', 'pending', 'verified', 'refund_requested', 'refunded'].includes(statusParam)) {
+        setStatusFilter(statusParam as any);
+      }
+
+      if (bookingIdParam || paymentIdParam) {
+        const target = list.find((p: any) =>
+          (bookingIdParam && String(p.booking_id) === String(bookingIdParam)) ||
+          (paymentIdParam && String(p.payment_id) === String(paymentIdParam))
+        );
+        if (target) {
+          setSelectedPayment(target);
+        }
+      }
     } catch {
       setPayments([]);
+    }
+  };
+
+  const getPaymentBreakdown = (payment: any) => {
+    if (!payment) return null;
+    const booking = payment.booking;
+    const stall = payment.booking?.stall;
+    const rentalType = booking?.rental_type || stall?.rental_type || 'daily';
+    const totalAmount = Number(payment.amount || booking?.total_amount || 0);
+
+    if (rentalType === 'monthly') {
+      let monthlyPrice = Number(booking?.monthly_price ?? stall?.monthly_price ?? 0);
+      let entryFee = Number(booking?.entry_fee ?? stall?.entry_fee ?? 0);
+      let securityDeposit = Number(booking?.security_deposit ?? stall?.security_deposit ?? 0);
+
+      if (monthlyPrice === 0 && entryFee === 0 && securityDeposit === 0 && totalAmount > 0) {
+        monthlyPrice = Math.round(totalAmount * (5000 / 8000));
+        entryFee = Math.round(totalAmount * (1000 / 8000));
+        securityDeposit = totalAmount - (monthlyPrice + entryFee);
+      }
+
+      return {
+        type: 'monthly',
+        typeLabel: 'เช่ารายเดือน',
+        items: [
+          { label: 'ค่าเช่าแผงรายเดือน', amount: monthlyPrice },
+          { label: 'ค่าธรรมเนียมแรกเข้า', amount: entryFee },
+          { label: 'เงินประกันสัญญา', amount: securityDeposit },
+        ],
+        totalAmount: totalAmount || (monthlyPrice + entryFee + securityDeposit),
+      };
+    } else {
+      const dailyPrice = Number(booking?.daily_price ?? stall?.daily_price ?? stall?.price ?? 500);
+      let days = 1;
+      if (booking?.start_date && booking?.end_date) {
+        const start = new Date(booking.start_date);
+        const end = new Date(booking.end_date);
+        const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        if (diff > 0) days = diff;
+      } else if (totalAmount > 0 && dailyPrice > 0) {
+        days = Math.max(1, Math.round(totalAmount / dailyPrice));
+      }
+
+      const calculatedTotal = dailyPrice * days;
+
+      return {
+        type: 'daily',
+        typeLabel: 'เช่ารายวัน',
+        items: [
+          { label: `ค่าเช่าแผงรายวัน (฿${dailyPrice.toLocaleString()}/วัน x ${days} วัน)`, amount: calculatedTotal },
+        ],
+        totalAmount: totalAmount || calculatedTotal,
+      };
     }
   };
 
@@ -373,11 +402,10 @@ const PaymentsPage: React.FC = () => {
       </div>
 
       {(successMessage || errorMessage) && (
-        <div className={`rounded-2xl border p-4 text-sm font-semibold shadow-xs animate-in fade-in duration-200 ${
-          errorMessage
+        <div className={`rounded-2xl border p-4 text-sm font-semibold shadow-xs animate-in fade-in duration-200 ${errorMessage
             ? 'border-red-200 bg-red-50/90 text-red-800'
             : 'border-emerald-200 bg-emerald-50/90 text-emerald-800'
-        }`}>
+          }`}>
           <div className="flex items-center gap-2">
             <Info className="h-4 w-4 flex-shrink-0" />
             <span>{errorMessage || successMessage}</span>
@@ -388,116 +416,116 @@ const PaymentsPage: React.FC = () => {
       {/* ── QR Code & Account Settings Section ── */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         {/* Current QR Code Preview Card */}
-        <div className="xl:col-span-5 flex flex-col justify-between rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs transition hover:shadow-md">
+        <div className="xl:col-span-5 flex flex-col justify-between rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs transition hover:shadow-md">
           <div>
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-slate-900">QR Code สำหรับรับเงิน</h2>
-                <p className="mt-0.5 text-xs text-slate-500">ภาพ QR Code ที่แสดงบนแอปพลิเคชันสำหรับผู้ซื้อ</p>
+                <h2 className="text-lg font-black text-slate-900">QR Code สำหรับรับเงิน</h2>
+                <p className="mt-1 text-sm font-semibold text-slate-500">ภาพ QR Code ที่แสดงบนแอปพลิเคชันสำหรับผู้ซื้อ</p>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 border border-emerald-200/60 shadow-2xs">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3.5 py-1.5 text-xs font-black text-emerald-800 border border-emerald-200/80 shadow-2xs">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
                 กำลังใช้งาน
               </span>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50/60 p-5">
-              <div className="mx-auto flex max-w-[240px] flex-col items-center rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50/70 p-5">
+              <div className="mx-auto flex max-w-[260px] flex-col items-center rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 {isLoading ? (
-                  <div className="flex h-48 w-48 items-center justify-center text-xs text-slate-400">
+                  <div className="flex h-48 w-48 items-center justify-center text-sm font-bold text-slate-400">
                     กำลังโหลดข้อมูล...
                   </div>
                 ) : qrCodeUrl ? (
-                  <img src={qrCodeUrl} alt="QR Code payment" className="h-48 w-48 rounded-xl object-contain" />
+                  <img src={qrCodeUrl} alt="QR Code payment" className="h-52 w-52 rounded-xl object-contain" />
                 ) : (
-                  <div className="flex h-48 w-48 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-center text-xs font-medium text-slate-400">
+                  <div className="flex h-52 w-52 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-center text-sm font-bold text-slate-400">
                     ยังไม่มี QR Code
                   </div>
                 )}
-                <div className="mt-3 w-full border-t border-slate-100 pt-3 text-center">
-                  <p className="text-sm font-bold text-slate-900">{formData.accountName || 'ยังไม่ได้ระบุชื่อบัญชี'}</p>
-                  <p className="mt-0.5 text-xs font-mono font-medium text-slate-500">{formData.accountNumber || 'ยังไม่ได้ระบุเลขบัญชี'}</p>
+                <div className="mt-4 w-full border-t border-slate-100 pt-3 text-center">
+                  <p className="text-base font-black text-slate-900">{formData.accountName || 'ยังไม่ได้ระบุชื่อบัญชี'}</p>
+                  <p className="mt-1 text-sm font-mono font-bold text-slate-600">{formData.accountNumber || 'ยังไม่ได้ระบุเลขบัญชี'}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
-            <p className="text-xs text-slate-400">รองรับ PromptPay ทุกธนาคาร</p>
+          <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
+            <p className="text-sm font-semibold text-slate-500">รองรับ PromptPay ทุกธนาคาร</p>
             <button
               onClick={handleRemoveQrCode}
               disabled={isSaving || !qrCodePreview}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/50 px-3.5 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 px-4 py-2 text-sm font-bold text-red-600 transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Trash2 size={14} />
+              <Trash2 size={16} />
               {isSaving ? 'กำลังลบ...' : 'ลบ QR Code'}
             </button>
           </div>
         </div>
 
         {/* Upload & Info Settings Card */}
-        <div className="xl:col-span-7 flex flex-col justify-between rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs transition hover:shadow-md">
+        <div className="xl:col-span-7 flex flex-col justify-between rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs transition hover:shadow-md">
           <div className="space-y-5">
             <div>
-              <h2 className="text-base font-bold text-slate-900">อัปโหลด QR Code & บัญชีรับเงิน</h2>
-              <p className="mt-0.5 text-xs text-slate-500">อัปเดตข้อมูลภาพ QR Code และเลขบัญชีที่ใช้ในการรับชำระเงินค่าจองแผงค้า</p>
+              <h2 className="text-lg font-black text-slate-900">อัปโหลด QR Code & บัญชีรับเงิน</h2>
+              <p className="mt-1 text-sm font-semibold text-slate-500">อัปเดตข้อมูลภาพ QR Code และเลขบัญชีที่ใช้ในการรับชำระเงินค่าจองแผงค้า</p>
             </div>
 
-            <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-sky-200 bg-sky-50/40 p-6 text-center transition hover:border-sky-400 hover:bg-sky-50/80">
-              <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-600 transition group-hover:scale-110">
-                <UploadCloud className="h-6 w-6" />
+            <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-sky-300 bg-sky-50/50 p-6 text-center transition hover:border-sky-500 hover:bg-sky-50/90">
+              <div className="mb-2 flex h-13 w-13 items-center justify-center rounded-2xl bg-sky-100 text-sky-600 transition group-hover:scale-110">
+                <UploadCloud className="h-7 w-7" />
               </div>
-              <p className="text-xs font-bold text-slate-800">ลากไฟล์มาวางที่นี่ หรือ <span className="text-sky-600 underline">คลิกเพื่อเลือกรูปภาพ</span></p>
-              <p className="mt-1 text-[11px] text-slate-400">รองรับภาพ PNG, JPG, JPEG (ขนาดไม่เกิน 5MB)</p>
+              <p className="text-sm font-black text-slate-800">ลากไฟล์มาวางที่นี่ หรือ <span className="text-sky-600 underline">คลิกเพื่อเลือกรูปภาพ</span></p>
+              <p className="mt-1.5 text-xs font-semibold text-slate-500">รองรับภาพ PNG, JPG, JPEG (ขนาดไม่เกิน 5MB)</p>
               <input type="file" accept="image/png,image/jpeg" className="sr-only" onChange={handleFileChange} />
             </label>
 
             {selectedFileName && (
-              <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2 text-xs font-semibold text-sky-800">
-                <FileText className="h-4 w-4 text-sky-600" />
+              <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-bold text-sky-800">
+                <FileText className="h-4.5 w-4.5 text-sky-600" />
                 <span>ไฟล์ที่เลือก: {selectedFileName}</span>
               </div>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-bold text-slate-700">ชื่อบัญชีผู้รับเงิน</label>
+                <label className="mb-2 block text-sm font-black text-slate-800">ชื่อบัญชีผู้รับเงิน</label>
                 <input
                   type="text"
                   value={formData.accountName}
                   onChange={(event) => handleInputChange('accountName', event.target.value)}
                   placeholder="เช่น ตลาดนัดกาดหน้ามอ"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100"
                 />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-bold text-slate-700">เลขบัญชี / PromptPay</label>
+                <label className="mb-2 block text-sm font-black text-slate-800">เลขบัญชี / PromptPay</label>
                 <input
                   type="text"
                   value={formData.accountNumber}
                   onChange={(event) => handleInputChange('accountNumber', event.target.value)}
                   placeholder="เช่น 081-xxx-xxxx หรือ 123-x-xxxxx-x"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100"
                 />
               </div>
             </div>
           </div>
 
-          <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-100 pt-5">
             <button
               onClick={handleCancel}
               disabled={isSaving}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:opacity-40"
+              className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-100 disabled:opacity-40"
             >
               ยกเลิก
             </button>
             <button
               onClick={handleSaveClick}
               disabled={isSaving}
-              className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-sky-700 active:scale-95 disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-6 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-sky-700 active:scale-95 disabled:opacity-40"
             >
-              <Save size={15} />
+              <Save size={17} />
               {isSaving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
             </button>
           </div>
@@ -508,23 +536,23 @@ const PaymentsPage: React.FC = () => {
       {isConfirmModalOpen &&
         createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md">
-            <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-150">
-              <h3 className="text-lg font-bold text-slate-900">ยืนยันการบันทึกข้อมูลบัญชีและ QR Code?</h3>
-              <p className="mt-2 text-xs leading-5 text-slate-600">
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-7 shadow-2xl animate-in fade-in zoom-in duration-150">
+              <h3 className="text-lg font-black text-slate-900">ยืนยันการบันทึกข้อมูลบัญชีและ QR Code?</h3>
+              <p className="mt-2 text-sm leading-6 font-medium text-slate-600">
                 คุณต้องการบันทึกการเปลี่ยนแปลงข้อมูลบัญชีและรูปภาพ QR Code รับชำระเงินนี้ใช่หรือไม่?
               </p>
 
               <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
                   onClick={() => setIsConfirmModalOpen(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100"
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-100"
                 >
                   ยกเลิก
                 </button>
                 <button
                   onClick={handleConfirmSave}
                   disabled={isSaving}
-                  className="rounded-xl bg-sky-600 px-5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-sky-700 disabled:opacity-40"
+                  className="rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-sky-700 disabled:opacity-40"
                 >
                   {isSaving ? 'กำลังบันทึก...' : 'ยืนยันการบันทึก'}
                 </button>
@@ -539,98 +567,93 @@ const PaymentsPage: React.FC = () => {
         {/* 1. All */}
         <div
           onClick={() => setStatusFilter('all')}
-          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
-            statusFilter === 'all'
+          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'all'
               ? 'border-sky-400 bg-white ring-2 ring-sky-400/30 shadow-md'
               : 'border-slate-200/80 bg-white hover:border-sky-300'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">ทั้งหมด</span>
+            <span className="text-xs font-black text-slate-600 uppercase tracking-wider">ทั้งหมด</span>
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 group-hover:bg-sky-600 group-hover:text-white transition-colors">
               <Inbox className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <p className="text-3xl font-black text-slate-900 tracking-tight">{summaryStats.total}</p>
-            <span className="text-[11px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-md">รายการ</span>
+            <span className="text-xs font-extrabold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-md">รายการ</span>
           </div>
         </div>
 
         {/* 2. Pending */}
         <div
           onClick={() => setStatusFilter('pending')}
-          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
-            statusFilter === 'pending'
+          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'pending'
               ? 'border-amber-400 bg-white ring-2 ring-amber-400/30 shadow-md'
               : 'border-slate-200/80 bg-white hover:border-amber-300'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">รอตรวจสอบ</span>
+            <span className="text-xs font-black text-amber-900 uppercase tracking-wider">รอตรวจสอบ</span>
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
               <Clock className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <p className="text-3xl font-black text-amber-700 tracking-tight">{summaryStats.pending}</p>
-            <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">ต้องตรวจสอบ</span>
+            <span className="text-xs font-extrabold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-md">ต้องตรวจสอบ</span>
           </div>
         </div>
 
         {/* 3. Refund Requested */}
         <div
           onClick={() => setStatusFilter('refund_requested')}
-          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
-            statusFilter === 'refund_requested'
+          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'refund_requested'
               ? 'border-purple-400 bg-white ring-2 ring-purple-400/30 shadow-md'
               : 'border-slate-200/80 bg-white hover:border-purple-300'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">ขอคืนเงิน</span>
+            <span className="text-xs font-black text-purple-900 uppercase tracking-wider">ขอคืนเงิน</span>
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
               <Receipt className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <p className="text-3xl font-black text-purple-700 tracking-tight">{summaryStats.refundRequested}</p>
-            <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">คำร้องขอคืนเงิน</span>
+            <span className="text-xs font-extrabold text-purple-800 bg-purple-50 px-2.5 py-1 rounded-md">คำร้องขอคืนเงิน</span>
           </div>
         </div>
 
         {/* 4. Refunded */}
         <div
           onClick={() => setStatusFilter('refunded')}
-          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
-            statusFilter === 'refunded'
+          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'refunded'
               ? 'border-blue-400 bg-white ring-2 ring-blue-400/30 shadow-md'
               : 'border-slate-200/80 bg-white hover:border-blue-300'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">คืนเงินแล้ว</span>
+            <span className="text-xs font-black text-blue-900 uppercase tracking-wider">คืนเงินแล้ว</span>
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
               <CheckCircle2 className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <p className="text-3xl font-black text-blue-700 tracking-tight">{summaryStats.refunded}</p>
-            <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">คืนเงินเรียบร้อย</span>
+            <span className="text-xs font-extrabold text-blue-800 bg-blue-50 px-2.5 py-1 rounded-md">คืนเงินเรียบร้อย</span>
           </div>
         </div>
 
         {/* 5. Verified Success (Last) */}
         <div
           onClick={() => setStatusFilter('verified')}
-          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
-            statusFilter === 'verified'
+          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'verified'
               ? 'border-emerald-400 bg-white ring-2 ring-emerald-400/30 shadow-md'
               : 'border-slate-200/80 bg-white hover:border-emerald-300'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">สำเร็จ</span>
+            <span className="text-xs font-black text-emerald-900 uppercase tracking-wider">สำเร็จ</span>
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
               <CheckCircle2 className="h-5 w-5" />
             </div>
@@ -647,9 +670,9 @@ const PaymentsPage: React.FC = () => {
         {/* Table Header Controls */}
         <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-base font-black text-slate-900">ประวัติการชำระเงิน</h2>
-            <p className="mt-0.5 text-xs font-medium text-slate-500">
-              แสดงรายการชำระเงิน (สูงสุด {itemsPerPage} คนต่อหน้า)
+            <h2 className="text-lg font-black text-slate-900">ประวัติการชำระเงิน</h2>
+            <p className="mt-0.5 text-sm font-semibold text-slate-500">
+              แสดงรายการชำระเงิน (สูงสุด {itemsPerPage} รายการต่อหน้า)
             </p>
           </div>
 
@@ -662,17 +685,17 @@ const PaymentsPage: React.FC = () => {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="ค้นหาชื่อผู้ค้า, ล็อก..."
-                className="w-full sm:w-64 rounded-xl border border-slate-200 bg-white pl-9 pr-3.5 py-2 text-xs font-semibold text-slate-800 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 shadow-2xs"
+                className="w-full sm:w-64 rounded-xl border border-slate-200 bg-white pl-9 pr-3.5 py-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 shadow-2xs"
               />
             </div>
 
             {/* Filter Dropdown */}
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-500 whitespace-nowrap">กรองสถานะ:</span>
+              <span className="text-sm font-bold text-slate-600 whitespace-nowrap">กรองสถานะ:</span>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-800 outline-none transition focus:border-sky-500 cursor-pointer shadow-2xs"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-sky-500 cursor-pointer shadow-2xs"
               >
                 <option value="all">ทั้งหมด</option>
                 <option value="pending">รอตรวจสอบ</option>
@@ -688,18 +711,19 @@ const PaymentsPage: React.FC = () => {
         <div className="min-h-[400px] overflow-x-auto flex flex-col justify-between">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/40 text-[11px] font-black uppercase tracking-wider text-slate-400">
-                <th className="px-6 py-3.5">วันที่ / เวลา</th>
-                <th className="px-6 py-3.5">ผู้ค้า / แผงค้า</th>
-                <th className="px-6 py-3.5">จำนวนเงิน</th>
-                <th className="px-6 py-3.5">สถานะ</th>
-                <th className="px-6 py-3.5 text-center">การกระทำ</th>
+              <tr className="border-b border-slate-100 bg-slate-50/60 text-xs font-black uppercase tracking-wider text-slate-500">
+                <th className="px-6 py-4">วันที่ / เวลา</th>
+                <th className="px-6 py-4">ผู้ค้า / แผงค้า</th>
+                <th className="px-6 py-4">ชำระเงินค่าอะไรบ้าง (รายการค่าใช้จ่าย)</th>
+                <th className="px-6 py-4">ยอดเงินรวม</th>
+                <th className="px-6 py-4">สถานะ</th>
+                <th className="px-6 py-4 text-center">การกระทำ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {paginatedPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-24 text-center text-xs font-semibold text-slate-400">
+                  <td colSpan={6} className="px-6 py-24 text-center text-sm font-semibold text-slate-400">
                     ไม่พบรายการชำระเงินตามเงื่อนไขที่เลือก
                   </td>
                 </tr>
@@ -707,41 +731,60 @@ const PaymentsPage: React.FC = () => {
                 paginatedPayments.map((txn) => {
                   const paymentDateStr = txn.payment_date
                     ? new Date(txn.payment_date).toLocaleString('th-TH', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
                     : '-';
                   const tenantName = txn.booking?.user?.username || 'ไม่ระบุ';
                   const stallNum = txn.booking?.stall?.stall_number || '-';
                   const initialChar = tenantName.charAt(0).toUpperCase();
+                  const bd = getPaymentBreakdown(txn);
 
                   return (
                     <tr key={txn.payment_id} className="transition-colors hover:bg-slate-50/80">
-                      <td className="px-6 py-4 whitespace-nowrap text-xs font-semibold text-slate-600">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-700">
                         {paymentDateStr}
                       </td>
 
                       {/* Tenant & Stall Column */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-xs font-black text-slate-700 shadow-2xs border border-slate-200/60">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-sm font-black text-slate-700 shadow-2xs border border-slate-200/60">
                             {initialChar}
                           </div>
                           <div>
-                            <div className="font-bold text-slate-900 text-sm">{tenantName}</div>
-                            <span className="inline-flex items-center rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-extrabold text-sky-700 border border-sky-200/60 mt-0.5">
+                            <div className="font-extrabold text-slate-900 text-base">{tenantName}</div>
+                            <span className="inline-flex items-center rounded-md bg-sky-50 px-2.5 py-0.5 text-xs font-black text-sky-700 border border-sky-200/60 mt-0.5">
                               ล็อก {stallNum}
                             </span>
                           </div>
                         </div>
                       </td>
 
+                      {/* Itemized Payment Breakdown Column */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {bd ? (
+                          <div className="space-y-1 text-xs">
+                            <span className={`inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-black ${
+                              bd.type === 'monthly' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}>
+                              {bd.type === 'monthly' ? 'เช่ารายเดือน' : 'เช่ารายวัน'}
+                            </span>
+                            <div className="text-xs font-semibold text-slate-600 max-w-xs truncate">
+                              {bd.items.map(i => i.label).join(' + ')}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">ชำระค่าเช่าแผง</span>
+                        )}
+                      </td>
+
                       {/* Amount Column */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-mono font-black text-slate-900 text-sm">
+                        <span className="font-mono font-black text-slate-900 text-base">
                           ฿{(txn.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                         </span>
                       </td>
@@ -826,11 +869,10 @@ const PaymentsPage: React.FC = () => {
                 <button
                   key={pageNum}
                   onClick={() => setCurrentPage(pageNum)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-xl border text-xs font-bold transition shadow-2xs ${
-                    activePage === pageNum
+                  className={`flex h-8 w-8 items-center justify-center rounded-xl border text-xs font-bold transition shadow-2xs ${activePage === pageNum
                       ? 'border-sky-600 bg-sky-600 text-white'
                       : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
-                  }`}
+                    }`}
                 >
                   {pageNum}
                 </button>
@@ -885,49 +927,87 @@ const PaymentsPage: React.FC = () => {
                   {/* Left Column: Tenant Info & Original Slip */}
                   <div className="w-full lg:w-96 shrink-0 space-y-5 border-b lg:border-b-0 lg:border-r border-slate-200/80 pr-0 lg:pr-7 pb-6 lg:pb-0">
                     <div>
-                      <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <User className="h-4.5 w-4.5 text-sky-600" /> ข้อมูลผู้ชำระเงิน & ล็อก
+                      <h4 className="text-base font-black text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <User className="h-5 w-5 text-sky-600" /> ข้อมูลผู้ชำระเงิน & ล็อก
                       </h4>
 
-                      <div className="space-y-3 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 text-sm font-semibold text-slate-800 shadow-2xs">
-                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
-                          <span className="text-xs font-bold text-slate-500">ผู้ค้า / ผู้เช่า:</span>
-                          <span className="text-sm font-extrabold text-slate-900">{selectedPayment.booking?.user?.username || 'ไม่ระบุ'}</span>
+                      <div className="space-y-3.5 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4.5 text-sm font-semibold text-slate-800 shadow-2xs">
+                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
+                          <span className="text-sm font-bold text-slate-500">ผู้ค้า / ผู้เช่า:</span>
+                          <span className="text-base font-black text-slate-900">{selectedPayment.booking?.user?.username || 'ไม่ระบุ'}</span>
                         </div>
-                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
-                          <span className="text-xs font-bold text-slate-500">เบอร์โทรศัพท์:</span>
-                          <span className="text-sm font-extrabold text-slate-900">{selectedPayment.booking?.user?.phone || '-'}</span>
+                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
+                          <span className="text-sm font-bold text-slate-500">เบอร์โทรศัพท์:</span>
+                          <span className="text-base font-black text-slate-900">{selectedPayment.booking?.user?.phone || '-'}</span>
                         </div>
-                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
-                          <span className="text-xs font-bold text-slate-500">หมายเลขล็อก:</span>
-                          <span className="text-sm font-black text-sky-600 bg-sky-50 px-2.5 py-0.5 rounded-lg border border-sky-200">
+                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
+                          <span className="text-sm font-bold text-slate-500">หมายเลขล็อก:</span>
+                          <span className="text-base font-black text-sky-700 bg-sky-50 px-3 py-0.5 rounded-lg border border-sky-200">
                             ล็อก {selectedPayment.booking?.stall?.stall_number || '-'}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
-                          <span className="text-xs font-bold text-slate-500">ขนาดแผงค้า:</span>
-                          <span className="text-sm font-bold text-slate-800">{selectedPayment.booking?.stall?.size || '-'}</span>
+                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
+                          <span className="text-sm font-bold text-slate-500">ขนาดแผงค้า:</span>
+                          <span className="text-base font-bold text-slate-800">{selectedPayment.booking?.stall?.size || '-'}</span>
                         </div>
-                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
-                          <span className="text-xs font-bold text-slate-500">ยอดเงินที่ชำระ:</span>
-                          <span className="font-mono font-black text-emerald-600 text-base">
+                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
+                          <span className="text-sm font-bold text-slate-500">ยอดเงินที่ชำระ:</span>
+                          <span className="font-mono font-black text-emerald-600 text-lg">
                             ฿{(selectedPayment.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                         <div className="flex justify-between items-center pt-1">
-                          <span className="text-xs font-bold text-slate-500">สถานะปัจจุบัน:</span>
+                          <span className="text-sm font-bold text-slate-500">สถานะปัจจุบัน:</span>
                           {selectedPayment.status === 'verified' || selectedPayment.status === 'success' ? (
-                            <span className="rounded-full bg-emerald-100 border border-emerald-300 px-3 py-1 text-xs font-black text-emerald-800">อนุมัติสำเร็จ</span>
+                            <span className="rounded-full bg-emerald-100 border border-emerald-300 px-3.5 py-1 text-sm font-black text-emerald-800">อนุมัติสำเร็จ</span>
                           ) : selectedPayment.status === 'refund_requested' ? (
-                            <span className="rounded-full bg-purple-100 border border-purple-300 px-3 py-1 text-xs font-black text-purple-800">ขอคืนเงิน</span>
+                            <span className="rounded-full bg-purple-100 border border-purple-300 px-3.5 py-1 text-sm font-black text-purple-800">ขอคืนเงิน</span>
                           ) : selectedPayment.status === 'refunded' ? (
-                            <span className="rounded-full bg-sky-100 border border-sky-300 px-3 py-1 text-xs font-black text-sky-800">คืนเงินแล้ว</span>
+                            <span className="rounded-full bg-sky-100 border border-sky-300 px-3.5 py-1 text-sm font-black text-sky-800">คืนเงินแล้ว</span>
                           ) : (
-                            <span className="rounded-full bg-amber-100 border border-amber-300 px-3 py-1 text-xs font-black text-amber-800">รอตรวจสอบ</span>
+                            <span className="rounded-full bg-amber-100 border border-amber-300 px-3.5 py-1 text-sm font-black text-amber-800">รอตรวจสอบ</span>
                           )}
                         </div>
                       </div>
                     </div>
+
+                    {/* Itemized Payment Breakdown Card */}
+                    {(() => {
+                      const bd = getPaymentBreakdown(selectedPayment);
+                      if (!bd) return null;
+                      return (
+                        <div>
+                          <h4 className="text-base font-black text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <Receipt className="h-5 w-5 text-sky-600" /> ชำระเงินค่าอะไรบ้าง (Payment Breakdown)
+                          </h4>
+
+                          <div className="space-y-4 rounded-2xl border border-sky-200/90 bg-gradient-to-br from-sky-50/90 to-blue-50/50 p-5 sm:p-6 text-sm font-semibold text-slate-800 shadow-sm">
+                            <div className="flex items-center justify-between border-b border-sky-200/70 pb-3">
+                              <span className="text-sm font-bold text-slate-600">รูปแบบการเช่า:</span>
+                              <span className="rounded-lg bg-sky-600 px-3 py-1 text-xs font-black text-white shadow-2xs">
+                                {bd.typeLabel}
+                              </span>
+                            </div>
+
+                            {bd.items.map((item, idx) => (
+                              <div key={idx} className="flex justify-between items-center text-sm font-bold text-slate-700 py-2 border-b border-sky-200/40">
+                                <span className="text-slate-700 font-bold">{item.label}:</span>
+                                <span className="font-mono font-black text-slate-900 text-base">
+                                  ฿{item.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            ))}
+
+                            <div className="flex justify-between items-center pt-3">
+                              <span className="font-extrabold text-slate-900 text-base">ยอดเงินรวมที่ชำระ:</span>
+                              <span className="font-mono font-black text-emerald-600 text-xl">
+                                ฿{bd.totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Original Payment Slip */}
                     <div>
@@ -960,7 +1040,7 @@ const PaymentsPage: React.FC = () => {
 
                   {/* Right Column: Dynamic Status Dashboard & Online Transfer Portal */}
                   <div className="flex-1 min-w-0 space-y-5">
-                    {/* 1. Pending Status Panel */}
+                    {/* 1. Pending Status Panel (Read-only History View) */}
                     {(selectedPayment.status === 'pending' || selectedPayment.status === 'pending_review') && (
                       <div className="space-y-4 rounded-3xl border border-amber-200 bg-gradient-to-b from-amber-50/80 to-amber-100/30 p-5 sm:p-6 shadow-xs">
                         <div className="flex items-center justify-between border-b border-amber-200/60 pb-3.5">
@@ -969,16 +1049,16 @@ const PaymentsPage: React.FC = () => {
                               <Clock className="h-4.5 w-4.5" />
                             </span>
                             <div>
-                              <h4 className="text-sm font-black text-amber-950 uppercase tracking-wider">ตรวจสอบ & อนุมัติรายการ (Payment Audit)</h4>
-                              <p className="text-xs font-medium text-amber-700">ตรวจสอบความถูกต้องของสลิปชำระเงินและกดยืนยันการชำระเงิน</p>
+                              <h4 className="text-sm font-black text-amber-950 uppercase tracking-wider">ข้อมูลการชำระเงิน (Pending Review)</h4>
+                              <p className="text-xs font-medium text-amber-700">รายการชำระเงินนี้อยู่ระหว่างรอการตรวจสอบความถูกต้อง</p>
                             </div>
                           </div>
                         </div>
 
-                        {/* Audit Verification Card */}
+                        {/* Audit Details Card (Read Only) */}
                         <div className="space-y-4 bg-white p-5 rounded-2xl border border-amber-200/80 shadow-2xs text-sm">
                           <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                            <span className="text-slate-600 font-bold text-xs">ยอดเงินชำระที่ต้องตรวจสอบ:</span>
+                            <span className="text-slate-600 font-bold text-xs">ยอดเงินชำระที่ส่งมา:</span>
                             <span className="font-mono font-black text-amber-800 text-base">
                               ฿{(selectedPayment.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                             </span>
@@ -986,32 +1066,28 @@ const PaymentsPage: React.FC = () => {
 
                           <div className="rounded-xl bg-amber-50/80 p-3.5 border border-amber-200/60 text-xs text-amber-900 space-y-2 font-medium">
                             <p className="font-bold text-amber-950 flex items-center gap-1.5 text-xs">
-                              <Info className="h-4 w-4 text-amber-600" /> คำแนะนำการตรวจสอบสำหรับแอดมิน:
+                              <Info className="h-4 w-4 text-amber-600" /> สถานะในระบบ:
                             </p>
-                            <ul className="list-disc list-inside space-y-1 pl-1 text-xs font-semibold">
-                              <li>ตรวจสอบยอดเงินโอนบนสลิปฝั่งซ้ายว่าตรงกับ <strong>฿{(selectedPayment.amount || 0).toLocaleString()}</strong></li>
-                              <li>ตรวจสอบชื่อบัญชีปลายทางและเวลาโอนเงินบนสลิป</li>
-                            </ul>
+                            <p className="text-xs font-semibold text-amber-800">
+                              รายการนี้เป็นประวัติการแจ้งชำระเงิน รอการตรวจสอบอนุมัติในระบบ
+                            </p>
                           </div>
 
-                          <div className="pt-2 flex flex-col sm:flex-row gap-3">
-                            <button
-                              onClick={handleApproveBooking}
-                              disabled={isRefunding}
-                              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3 px-5 text-sm font-extrabold text-white shadow-md transition hover:from-emerald-700 hover:to-teal-700 active:scale-98 disabled:opacity-40 cursor-pointer"
-                            >
-                              <CheckCircle2 className="h-5 w-5" />
-                              {isRefunding ? 'กำลังบันทึก...' : 'อนุมัติการชำระเงิน'}
-                            </button>
-                            <button
-                              onClick={handleRejectBooking}
-                              disabled={isRefunding}
-                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-5 py-3 text-sm font-bold text-rose-700 transition hover:bg-rose-100 disabled:opacity-40 cursor-pointer"
-                            >
-                              <XCircle className="h-5 w-5" />
-                              ปฏิเสธรายการ
-                            </button>
-                          </div>
+                          {selectedPayment.booking_id && (
+                            <div className="pt-1">
+                              <button
+                                onClick={() => {
+                                  const bookingId = selectedPayment.booking_id;
+                                  setSelectedPayment(null);
+                                  navigate(`/verifications?booking_id=${bookingId}`);
+                                }}
+                                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 py-2.5 px-4 text-xs font-bold text-white shadow-xs transition hover:bg-amber-700 cursor-pointer"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                                ไปยังหน้าอนุมัติการจองแผงเพื่อตรวจสอบ
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1123,11 +1199,10 @@ const PaymentsPage: React.FC = () => {
                                 </span>
                                 <button
                                   onClick={() => handleCopyAccount(selectedPayment.refund_account_number)}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition shadow-2xs cursor-pointer ${
-                                    copiedAccountNumber
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition shadow-2xs cursor-pointer ${copiedAccountNumber
                                       ? 'bg-emerald-600 text-white'
                                       : 'bg-purple-100 text-purple-800 hover:bg-purple-200'
-                                  }`}
+                                    }`}
                                 >
                                   {copiedAccountNumber ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                                   {copiedAccountNumber ? 'คัดลอกแล้ว' : 'คัดลอก'}

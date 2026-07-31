@@ -4,14 +4,12 @@ import {
   BadgeCheck,
   Store,
   Users,
-  Wallet,
   CheckCircle2,
   ArrowUpRight,
   ShieldAlert,
   CreditCard,
   Map,
   Sparkles,
-  TrendingUp,
   Building2,
   Clock,
   ChevronRight,
@@ -19,8 +17,14 @@ import {
   FolderPlus,
   Heart,
   Search,
+  UserRound,
   Layers,
   X,
+  ZoomIn,
+  ZoomOut,
+  MapPin,
+  Maximize2,
+  RefreshCw,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,10 +37,11 @@ type OverviewCard = {
 };
 
 type CategoryShareItem = {
-  id: string | number;
+  id?: string | number;
   name: string;
-  count: number;
-  percentage: number;
+  count?: number;
+  value?: number;
+  percentage?: number;
 };
 
 type UserInterestItem = {
@@ -73,6 +78,7 @@ type MarketSummary = {
   pending_reports?: number;
   total_shops?: number;
   total_sellers?: number;
+  pending_sellers?: number;
   total_users_with_interests?: number;
 };
 
@@ -99,6 +105,365 @@ const interestBarColors = [
   'from-amber-500 to-yellow-400',
   'from-emerald-500 to-teal-400',
 ];
+
+const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = ({ navigate }) => {
+  const [stalls, setStalls] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [zoom, setZoom] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [selectedItem, setSelectedItem] = useState<any | null>(null);
+
+  useEffect(() => {
+    const loadMap = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/v1/maps/1');
+        if (!res.ok) return;
+        const json = await res.json();
+        const items = Array.isArray(json?.data?.items) ? json.data.items : [];
+        setStalls(
+          items.map((item: any) => ({
+            id: String(item.map_item_id),
+            code: item.label || `แผงค้า #${item.stall_id || item.map_item_id}`,
+            status: item.status || 'available',
+            item_type: item.item_type || 'block',
+            stall_id: item.stall_id,
+            zone_id: item.zone_id,
+            x: Number(item.x) || 100,
+            y: Number(item.y) || 100,
+            width: Number(item.width) || 75,
+            height: Number(item.height) || 75,
+            fill_color: item.fill_color,
+            size: item.size || '3x3 เมตร',
+            price: item.price || 500,
+            rental_type: item.rental_type || 'daily',
+            daily_price: item.daily_price !== undefined && item.daily_price !== null ? Number(item.daily_price) : (item.price || 500),
+            monthly_price: item.monthly_price !== undefined && item.monthly_price !== null ? Number(item.monthly_price) : null,
+            entry_fee: item.entry_fee !== undefined && item.entry_fee !== null ? Number(item.entry_fee) : null,
+            security_deposit: item.security_deposit !== undefined && item.security_deposit !== null ? Number(item.security_deposit) : null,
+            seller: item.seller,
+          }))
+        );
+      } catch {
+        // fail silently
+      } finally {
+        setLoading(false);
+      }
+    };
+    void loadMap();
+  }, []);
+
+  const [pointerDownPos, setPointerDownPos] = useState({ x: 0, y: 0 });
+  const [hasMoved, setHasMoved] = useState(false);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    setIsPanning(true);
+    setHasMoved(false);
+    setPointerDownPos({ x: e.clientX, y: e.clientY });
+    setPanStart({
+      x: e.clientX - panOffset.x,
+      y: e.clientY - panOffset.y,
+    });
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (isPanning) {
+      const dx = Math.abs(e.clientX - pointerDownPos.x);
+      const dy = Math.abs(e.clientY - pointerDownPos.y);
+      if (dx > 5 || dy > 5) {
+        setHasMoved(true);
+      }
+      setPanOffset({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y,
+      });
+    }
+  };
+
+  const handlePointerUp = () => {
+    setIsPanning(false);
+  };
+
+  const availableCount = stalls.filter((s) => s.item_type === 'block' && s.status === 'available').length;
+  const occupiedCount = stalls.filter((s) => s.item_type === 'block' && ['occupied', 'approved', 'verified'].includes(s.status)).length;
+
+  const getItemTypeIcon = (type: string) => {
+    switch (type) {
+      case 'block': return '🏪';
+      case 'road': return '🛣️';
+      case 'toilet': return '🚻';
+      case 'entrance': return '🚪';
+      case 'exit': return '🚪';
+      case 'dining': return '🍽️';
+      case 'parking': return '🅿️';
+      case 'info': return 'ℹ️';
+      case 'trash': return '🗑️';
+      case 'zone': return '📁';
+      default: return '📍';
+    }
+  };
+
+  const getItemTypeName = (type: string) => {
+    switch (type) {
+      case 'block': return 'แผงค้า';
+      case 'road': return 'ถนน / ทางเดิน';
+      case 'toilet': return 'ห้องน้ำ';
+      case 'entrance': return 'ทางเข้าหลัก';
+      case 'exit': return 'ทางออก';
+      case 'dining': return 'ที่นั่งพักกินอาหาร';
+      case 'parking': return 'ที่จอดรถ';
+      case 'info': return 'จุดประชาสัมพันธ์';
+      case 'trash': return 'จุดทิ้งขยะ';
+      case 'zone': return 'โซนพื้นที่';
+      default: return 'วัตถุผังตลาด';
+    }
+  };
+
+  const getItemStyle = (stall: any) => {
+    if (stall.item_type === 'road') return 'bg-slate-200/90 border-slate-300 text-slate-700 font-bold border-2';
+    if (stall.item_type === 'toilet') return 'bg-cyan-600 border-2 border-cyan-700 text-white font-black';
+    if (stall.item_type === 'entrance') return 'bg-emerald-600 border-2 border-emerald-700 text-white font-black';
+    if (stall.item_type === 'exit') return 'bg-rose-600 border-2 border-rose-700 text-white font-black';
+    if (stall.item_type === 'dining') return 'bg-amber-500 border-2 border-amber-600 text-white font-black';
+    if (stall.item_type === 'parking') return 'bg-blue-600 border-2 border-blue-700 text-white font-black';
+    if (stall.item_type === 'info') return 'bg-purple-600 border-2 border-purple-700 text-white font-black';
+    if (stall.item_type === 'trash') return 'bg-slate-700 border-2 border-slate-800 text-white font-black';
+    if (stall.item_type === 'zone') return 'bg-indigo-50/20 border-dashed border-2 border-indigo-400/60 text-indigo-950 font-black';
+
+    if (['occupied', 'approved', 'verified'].includes(stall.status)) {
+      return 'bg-rose-500 border-2 border-rose-600 text-white font-black shadow-md';
+    }
+    if (stall.status === 'repair') {
+      return 'bg-amber-500 border-2 border-amber-600 text-white font-black shadow-md';
+    }
+    return 'bg-emerald-500 border-2 border-emerald-600 text-white font-black shadow-md hover:bg-emerald-600';
+  };
+
+  const sortedStalls = [...stalls].sort((a, b) => {
+    if (a.item_type === 'zone' && b.item_type !== 'zone') return -1;
+    if (a.item_type !== 'zone' && b.item_type === 'zone') return 1;
+    return 0;
+  });
+
+  return (
+    <section className="rounded-[28px] border border-slate-200 bg-white p-6 sm:p-7 shadow-xs space-y-4">
+      {/* Section Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-100 text-blue-600 font-bold">
+              <MapPin className="h-4.5 w-4.5" />
+            </span>
+            <h3 className="text-lg font-extrabold text-slate-900">ตัวอย่างแผนผังตลาดนัด (Interactive Market Map)</h3>
+          </div>
+          <p className="mt-1 text-xs font-semibold text-slate-600">
+            แสดงผังโครงสร้างแผงค้าในตลาด (สามารถลากเลื่อนดูตำแหน่งแผงค้าและขยายย่อได้ ไม่สามารถแก้ไขตำแหน่งหรือเพิ่มข้อมูลได้)
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 text-xs font-extrabold">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> แผงว่าง ({availableCount})
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-200 px-2.5 py-1 text-rose-700">
+              <span className="h-2 w-2 rounded-full bg-rose-600" /> มีผู้เช่า ({occupiedCount})
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/stores')}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition cursor-pointer active:scale-95"
+          >
+            <Maximize2 className="h-4 w-4" />
+            <span>จัดการผังเต็ม</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Interactive Read-Only Canvas Container */}
+      <div
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        className="relative h-[480px] w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-inner select-none cursor-grab active:cursor-grabbing"
+      >
+        <div
+          className="absolute inset-0 transition-transform duration-75"
+          style={{
+            backgroundImage: 'radial-gradient(#cbd5e1 1.4px, transparent 1.4px)',
+            backgroundSize: '24px 24px',
+            transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0px) scale(${zoom})`,
+            transformOrigin: 'top left',
+            width: '6000px',
+            height: '6000px',
+          }}
+        >
+          {loading ? (
+            <div className="flex h-full w-full items-center justify-center text-xs font-bold text-slate-400">
+              กำลังโหลดผังตลาด...
+            </div>
+          ) : (
+            sortedStalls.map((stall) => (
+              <div
+                key={stall.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!hasMoved) {
+                    setSelectedItem(stall);
+                  }
+                }}
+                className={`absolute flex flex-col items-center justify-center rounded-2xl text-center transition-all cursor-pointer ${getItemStyle(stall)}`}
+                style={{
+                  left: `${stall.x}px`,
+                  top: `${stall.y}px`,
+                  width: `${stall.width}px`,
+                  height: `${stall.height}px`,
+                }}
+              >
+                <div className="flex items-center justify-center gap-1 max-w-full px-1">
+                  <span className="text-sm">{getItemTypeIcon(stall.item_type)}</span>
+                  <span className="text-xs font-black truncate uppercase">{stall.code}</span>
+                </div>
+
+                {stall.item_type === 'block' && stall.width >= 55 && (
+                  <span className="text-[10px] font-extrabold bg-black/20 text-white px-1.5 py-0.5 rounded-full mt-0.5 truncate max-w-full">
+                    {['occupied', 'approved', 'verified'].includes(stall.status)
+                      ? (stall.seller?.shop_name || stall.seller?.name || 'มีผู้เช่าแล้ว')
+                      : stall.rental_type === 'monthly'
+                        ? `฿${(stall.monthly_price || stall.price || 0).toLocaleString()}/เดือน`
+                        : `฿${(stall.daily_price || stall.price || 0).toLocaleString()}/วัน`}
+                  </span>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Zoom Controls Overlay */}
+        <div className="absolute bottom-4 left-4 z-20 flex items-center gap-1 rounded-xl border border-slate-200 bg-white/95 backdrop-blur-md p-1.5 shadow-md">
+          <button
+            onClick={() => setZoom((z) => Math.min(2.5, z + 0.15))}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 transition"
+            title="ขยาย"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setZoom((z) => Math.max(0.4, z - 0.15))}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 transition"
+            title="ย่อ"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => {
+              setZoom(1);
+              setPanOffset({ x: 0, y: 0 });
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 transition"
+            title="รีเซ็ตตำแหน่ง"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+          <span className="px-2 text-xs font-bold text-slate-600 font-mono">
+            {Math.round(zoom * 100)}%
+          </span>
+        </div>
+
+        <div className="absolute top-4 right-4 z-20 rounded-xl bg-slate-900/80 border border-slate-700/80 px-3.5 py-1.5 text-[11px] font-bold text-white backdrop-blur-md shadow-xs">
+          ✋ ลากเพื่อเลื่อนดูผังตลาด | คลิกที่แผงเพื่อดูรายละเอียด (Read-Only)
+        </div>
+
+        {/* Read-only Item Details Card Popover */}
+        {selectedItem && (
+          <div className="absolute bottom-4 right-4 z-30 w-80 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{getItemTypeIcon(selectedItem.item_type)}</span>
+                <div>
+                  <h4 className="font-black text-sm text-slate-900">{selectedItem.code}</h4>
+                  <span className="text-[10px] font-bold text-indigo-600">{getItemTypeName(selectedItem.item_type)}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-3 space-y-2 text-xs font-semibold text-slate-700">
+              <div className="flex justify-between py-0.5 border-b border-slate-100">
+                <span className="text-slate-500">ขนาดพื้นที่:</span>
+                <span className="font-bold text-slate-900">{selectedItem.size}</span>
+              </div>
+
+              {selectedItem.item_type === 'block' && (
+                <>
+                  <div className="flex justify-between py-0.5 border-b border-slate-100">
+                    <span className="text-slate-500">ประเภทการเช่า:</span>
+                    <span className="font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                      {selectedItem.rental_type === 'monthly' ? 'เช่ารายเดือน' : 'เช่ารายวัน'}
+                    </span>
+                  </div>
+
+                  {selectedItem.rental_type === 'monthly' ? (
+                    <>
+                      <div className="flex justify-between py-0.5 border-b border-slate-100">
+                        <span className="text-slate-500">ค่าเช่ารายเดือน:</span>
+                        <span className="font-black text-slate-900 font-mono">฿{(selectedItem.monthly_price || selectedItem.price || 0).toLocaleString()} / เดือน</span>
+                      </div>
+                      {selectedItem.entry_fee !== null && (
+                        <div className="flex justify-between py-0.5 border-b border-slate-100">
+                          <span className="text-slate-500">ค่าแรกเข้า:</span>
+                          <span className="font-bold text-slate-800 font-mono">฿{(selectedItem.entry_fee || 0).toLocaleString()}</span>
+                        </div>
+                      )}
+                      {selectedItem.security_deposit !== null && (
+                        <div className="flex justify-between py-0.5 border-b border-slate-100">
+                          <span className="text-slate-500">เงินประกัน:</span>
+                          <span className="font-bold text-slate-800 font-mono">฿{(selectedItem.security_deposit || 0).toLocaleString()}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex justify-between py-0.5 border-b border-slate-100">
+                      <span className="text-slate-500">ค่าเช่ารายวัน:</span>
+                      <span className="font-black text-emerald-600 font-mono">฿{(selectedItem.daily_price || selectedItem.price || 0).toLocaleString()} / วัน</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between py-0.5">
+                    <span className="text-slate-500">สถานะ:</span>
+                    <span className={`font-extrabold px-2 py-0.5 rounded-full text-[10px] ${
+                      ['occupied', 'approved', 'verified'].includes(selectedItem.status)
+                        ? 'bg-rose-100 text-rose-800'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {['occupied', 'approved', 'verified'].includes(selectedItem.status) ? 'มีผู้เช่าแล้ว' : 'ว่างพร้อมเช่า'}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {selectedItem.seller && (
+                <div className="mt-2 pt-2 border-t border-slate-100 bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 space-y-1">
+                  <span className="text-[10px] font-black text-indigo-700 uppercase tracking-wider block">ผู้จอง / ร้านค้า:</span>
+                  <p className="font-black text-slate-900">{selectedItem.seller.shop_name || selectedItem.seller.name}</p>
+                  <p className="text-[11px] font-medium text-slate-600">ผู้เช่า: {selectedItem.seller.name} ({selectedItem.seller.phone || '-'})</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -219,7 +584,7 @@ export const Dashboard: React.FC = () => {
     void loadDashboardData();
   }, []);
 
-  const { summary, zones, categories, userInterests, recentActivity } = dashboardData;
+  const { summary, zones, categories, userInterests } = dashboardData;
 
   const filteredCategories = categories.filter((c) =>
     c.name.toLowerCase().includes(categorySearch.trim().toLowerCase())
@@ -229,63 +594,10 @@ export const Dashboard: React.FC = () => {
     i.name.toLowerCase().includes(interestSearch.trim().toLowerCase())
   );
 
-  const formatCurrency = (val?: number) => {
-    if (val === undefined || val === null) return '฿0.00';
-    return `฿${val.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
   return (
     <div className="space-y-7 animate-in fade-in duration-300">
-      <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <button
-          type="button"
-          onClick={() => navigate('/payments')}
-          className="group relative overflow-hidden rounded-[24px] border border-emerald-100 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-500/10 cursor-pointer"
-        >
-          <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-emerald-500 to-teal-600" />
-          <div className="flex items-center justify-between pl-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">รายได้มัดจำรวม</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/30 group-hover:scale-110 transition-transform">
-              <Wallet className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="mt-4 pl-2">
-            <p className="text-3xl font-black tracking-tight text-emerald-700 font-mono">
-              {formatCurrency(summary.total_revenue)}
-            </p>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-600">
-              <TrendingUp className="h-3.5 w-3.5" />
-              <span>ยอดมัดจำชำระสมบูรณ์แล้ว</span>
-            </div>
-          </div>
-          <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/verifications')}
-          className="group relative overflow-hidden rounded-[24px] border border-amber-100 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-amber-300 hover:shadow-lg hover:shadow-amber-500/10 cursor-pointer"
-        >
-          <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-amber-500 to-orange-500" />
-          <div className="flex items-center justify-between pl-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">คำขอจองรออนุมัติ</span>
-            <div className="flex h-1-1 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/30 group-hover:scale-110 transition-transform">
-              <BadgeCheck className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="mt-4 pl-2">
-            <div className="flex items-baseline gap-1.5">
-              <p className="text-3xl font-black tracking-tight text-amber-600">{summary.pending_bookings ?? 0}</p>
-              <span className="text-sm font-semibold text-slate-400">รายการ</span>
-            </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
-              <Clock className="h-3.5 w-3.5" />
-              <span>รอการตรวจสอบจากแอดมิน</span>
-            </div>
-          </div>
-          <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
-        </button>
-
+      <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {/* 1. แจ้งเหตุ/ปัญหา (หน้าสุด) */}
         <button
           type="button"
           onClick={() => navigate('/reports')}
@@ -311,6 +623,85 @@ export const Dashboard: React.FC = () => {
           <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
 
+        {/* 2. คำขอจองรออนุมัติ */}
+        <button
+          type="button"
+          onClick={() => navigate('/verifications')}
+          className="group relative overflow-hidden rounded-[24px] border border-amber-100 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-amber-300 hover:shadow-lg hover:shadow-amber-500/10 cursor-pointer"
+        >
+          <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-amber-500 to-orange-500" />
+          <div className="flex items-center justify-between pl-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">คำขอจองรออนุมัติ</span>
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/30 group-hover:scale-110 transition-transform">
+              <BadgeCheck className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-4 pl-2">
+            <div className="flex items-baseline gap-1.5">
+              <p className="text-3xl font-black tracking-tight text-amber-600">{summary.pending_bookings ?? 0}</p>
+              <span className="text-sm font-semibold text-slate-400">รายการ</span>
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+              <Clock className="h-3.5 w-3.5" />
+              <span>รอการตรวจสอบจากแอดมิน</span>
+            </div>
+          </div>
+          <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+        </button>
+
+        {/* 3. ข้อมูลผู้ค้า */}
+        <button
+          type="button"
+          onClick={() => navigate('/sellers')}
+          className="group relative overflow-hidden rounded-[24px] border border-sky-100 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-sky-300 hover:shadow-lg hover:shadow-sky-500/10 cursor-pointer"
+        >
+          <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-sky-500 to-blue-600" />
+          <div className="flex items-center justify-between pl-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">ข้อมูลผู้ค้า</span>
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/30 group-hover:scale-110 transition-transform">
+              <Users className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-4 pl-2">
+            <div className="flex items-baseline gap-1.5">
+              <p className="text-3xl font-black tracking-tight text-sky-600">{summary.total_sellers ?? 0}</p>
+              <span className="text-sm font-semibold text-slate-400">ราย</span>
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-sky-600">
+              <Users className="h-3.5 w-3.5" />
+              <span>ผู้ค้าในระบบที่อนุมัติแล้ว</span>
+            </div>
+          </div>
+          <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+        </button>
+
+        {/* 4. รายการรออนุมัติผู้สมัครใหม่ */}
+        <button
+          type="button"
+          onClick={() => navigate('/sellers')}
+          className="group relative overflow-hidden rounded-[24px] border border-purple-100 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-purple-300 hover:shadow-lg hover:shadow-purple-500/10 cursor-pointer"
+        >
+          <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-purple-500 to-indigo-600" />
+          <div className="flex items-center justify-between pl-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">รายการรออนุมัติผู้สมัครใหม่</span>
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-md shadow-purple-500/30 group-hover:scale-110 transition-transform">
+              <UserRound className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-4 pl-2">
+            <div className="flex items-baseline gap-1.5">
+              <p className="text-3xl font-black tracking-tight text-purple-600">{summary.pending_sellers ?? 0}</p>
+              <span className="text-sm font-semibold text-slate-400">รายการ</span>
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-purple-600">
+              <Clock className="h-3.5 w-3.5" />
+              <span>รอการตรวจสอบเอกสาร</span>
+            </div>
+          </div>
+          <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+        </button>
+
+        {/* 5. จำนวนแผงค้าในตลาดทั้งหมด */}
         <button
           type="button"
           onClick={() => navigate('/stores')}
@@ -318,22 +709,20 @@ export const Dashboard: React.FC = () => {
         >
           <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-blue-600 to-indigo-600" />
           <div className="flex items-center justify-between pl-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">อัตราการครองแผง</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">จำนวนแผงค้าในตลาดทั้งหมด</span>
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/30 group-hover:scale-110 transition-transform">
               <Store className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-4 pl-2">
-            <div className="flex items-baseline gap-1">
-              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.occupied_stalls ?? 0}</p>
-              <span className="text-base font-bold text-slate-400">/{summary.total_stalls ?? 0} แผง</span>
+            <div className="flex items-baseline gap-1.5">
+              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.total_stalls ?? 0}</p>
+              <span className="text-sm font-semibold text-slate-400">แผง</span>
             </div>
             <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600">
               <Building2 className="h-3.5 w-3.5" />
               <span>
-                {summary.total_stalls
-                  ? `${Math.round(((summary.occupied_stalls ?? 0) / summary.total_stalls) * 100)}% ของความจุตลาด`
-                  : '0%'}
+                จองแล้ว {summary.occupied_stalls ?? 0} แผง / ว่าง {summary.available_stalls ?? ((summary.total_stalls ?? 0) - (summary.occupied_stalls ?? 0))} แผง
               </span>
             </div>
           </div>
@@ -383,22 +772,23 @@ export const Dashboard: React.FC = () => {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-3 items-stretch">
-        <div className="h-[500px] rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-xs flex flex-col justify-between overflow-hidden">
+        {/* 1. ความหนาแน่นโซนตลาด */}
+        <div className="h-[420px] rounded-[28px] border border-slate-200 bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between overflow-hidden">
           <div className="shrink-0 mb-3 border-b border-slate-100 pb-3">
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-slate-900">ความหนาแน่นโซนตลาด</h3>
-                  <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 border border-blue-200/60">
+                  <h3 className="text-base font-extrabold text-slate-900">ความหนาแน่นโซนตลาด</h3>
+                  <span className="rounded-full bg-blue-100/80 px-2.5 py-0.5 text-xs font-extrabold text-blue-800 border border-blue-200">
                     {zones.length} โซน
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-slate-400">สถานะแผงค้าว่างและแผงจองแบ่งตามโซน</p>
+                <p className="mt-1 text-xs font-semibold text-slate-600">สถานะแผงค้าว่างและแผงจองแบ่งตามโซน</p>
               </div>
               <button
                 type="button"
                 onClick={() => navigate('/stores')}
-                className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 transition"
+                className="flex items-center gap-1 text-xs font-extrabold text-blue-600 hover:text-blue-700 transition cursor-pointer"
               >
                 <span>ผังเต็ม</span>
                 <ChevronRight className="h-4 w-4" />
@@ -411,51 +801,79 @@ export const Dashboard: React.FC = () => {
               zones.map((zone) => {
                 const total = zone.total_stalls || 1;
                 const occupiedPct = Math.round((zone.occupied_count / total) * 100);
+                const zoneLetter = zone.zone_name.replace(/[^A-Za-z0-9ก-๙]/g, '').charAt(3) || 'Z';
                 return (
-                  <div key={zone.zone_id} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 space-y-2 hover:bg-blue-50/30 transition-colors">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-800">{zone.zone_name}</span>
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-semibold text-emerald-700">จองแล้ว {zone.occupied_count}</span>
-                        <span className="font-semibold text-slate-400">ว่าง {zone.available_count}</span>
-                        <span className="font-black text-blue-600">{occupiedPct}%</span>
+                  <div
+                    key={zone.zone_id}
+                    onClick={() => navigate('/stores')}
+                    className="group cursor-pointer rounded-2xl border border-slate-200/90 bg-gradient-to-b from-slate-50/90 to-white p-3.5 shadow-2xs transition-all duration-200 hover:border-blue-300 hover:shadow-md"
+                  >
+                    {/* Zone Header */}
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 font-extrabold text-xs text-white shadow-xs">
+                          {zoneLetter}
+                        </span>
+                        <span className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition">
+                          {zone.zone_name}
+                        </span>
+                      </div>
+                      <span className="rounded-lg bg-slate-100 px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
+                        ทั้งหมด {total} แผง
+                      </span>
+                    </div>
+
+                    {/* Stats Grid: จองแล้ว vs ว่าง */}
+                    <div className="grid grid-cols-2 gap-2 mb-2.5">
+                      <div className="rounded-xl bg-blue-50/90 p-2 border border-blue-100 flex items-center justify-between">
+                        <span className="text-xs font-bold text-blue-900">จองแล้ว:</span>
+                        <span className="font-black text-sm text-blue-700">{zone.occupied_count} แผง</span>
+                      </div>
+                      <div className="rounded-xl bg-emerald-50/90 p-2 border border-emerald-100 flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-900">ว่าง:</span>
+                        <span className="font-black text-sm text-emerald-700">{zone.available_count} แผง</span>
                       </div>
                     </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-200/80 flex">
-                      <div
-                        className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-500"
-                        style={{ width: `${occupiedPct}%` }}
-                      />
-                      <div
-                        className="h-full bg-emerald-400/80 transition-all duration-500"
-                        style={{ width: `${100 - occupiedPct}%` }}
-                      />
+
+                    {/* Occupancy Indicator Bar */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px] font-bold text-slate-600">
+                        <span>อัตราการครองแผงโซนนี้</span>
+                        <span className="font-black text-blue-600">{occupiedPct}%</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-200 flex">
+                        <div
+                          className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-500 rounded-full"
+                          style={{ width: `${occupiedPct}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
                 );
               })
             ) : (
-              <div className="flex h-full items-center justify-center text-xs text-slate-400">ไม่มีข้อมูลโซนตลาด</div>
+              <div className="flex h-full items-center justify-center text-xs font-semibold text-slate-500">ไม่มีข้อมูลโซนตลาด</div>
             )}
           </div>
 
-          <div className="shrink-0 pt-3 mt-2 border-t border-slate-100 flex items-center justify-between text-xs font-medium text-slate-400">
+          <div className="shrink-0 pt-3 mt-1 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600">
             <span>รวม {zones.length} โซนในผังตลาด</span>
-            <span className="font-bold text-slate-700">ความจุ {summary.total_stalls ?? 0} แผง</span>
+            <span className="font-extrabold text-slate-900">ทั้งหมด {summary.total_stalls ?? 0} แผง</span>
           </div>
         </div>
 
-        <div className="h-[500px] rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-xs flex flex-col justify-between overflow-hidden">
+        {/* 2. สัดส่วนประเภทสินค้า */}
+        <div className="h-[420px] rounded-[28px] border border-slate-200 bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between overflow-hidden">
           <div className="shrink-0 mb-3 border-b border-slate-100 pb-3 space-y-2.5">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-slate-900">สัดส่วนประเภทสินค้า</h3>
-                  <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700 border border-indigo-200/60">
+                  <h3 className="text-base font-extrabold text-slate-900">สัดส่วนประเภทสินค้า</h3>
+                  <span className="rounded-full bg-indigo-100/80 px-2.5 py-0.5 text-xs font-extrabold text-indigo-800 border border-indigo-200">
                     {categories.length} หมวดหมู่
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-slate-400">หมวดหมู่ร้านค้าจำแนกตามความนิยม</p>
+                <p className="mt-1 text-xs font-semibold text-slate-600">หมวดหมู่ร้านค้าจำแนกตามความนิยม</p>
               </div>
 
               <button
@@ -469,86 +887,93 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 placeholder="ค้นหาหมวดหมู่สินค้า..."
                 value={categorySearch}
                 onChange={(e) => setCategorySearch(e.target.value)}
-                className="w-full rounded-xl border border-slate-200/80 bg-slate-50/70 pl-8 pr-3 py-1.5 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3.5 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:bg-white focus:outline-none"
               />
               {categorySearch && (
                 <button
                   type="button"
                   onClick={() => setCategorySearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-4 w-4" />
                 </button>
               )}
             </div>
 
             {categorySuccessMsg && (
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800 animate-in fade-in duration-200">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 animate-in fade-in duration-200">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 <span>{categorySuccessMsg}</span>
               </div>
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
             {filteredCategories.length > 0 ? (
-              filteredCategories.map((category, index) => (
-                <div key={`${category.id ?? 'cat'}-${category.name}`} className="group rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 transition-colors hover:bg-blue-50/20">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-sm text-slate-800">{category.name}</p>
-                      <p className="mt-0.5 text-xs text-slate-400">{category.count} ร้านค้าที่เปิดบริการ</p>
+              filteredCategories.map((category, index) => {
+                const count = category.count ?? category.value ?? 0;
+                const percentage = category.percentage ?? 0;
+                return (
+                  <div key={`${category.id ?? 'cat'}-${category.name}`} className="group rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 transition-colors hover:bg-blue-50/30">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-sm text-slate-900 truncate">{category.name}</span>
+                          <span className="text-xs font-bold text-slate-600 shrink-0">({count} ร้านค้า)</span>
+                        </div>
+                      </div>
+                      <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-black text-blue-700 shadow-2xs border border-slate-200 shrink-0">
+                        {percentage}%
+                      </span>
                     </div>
-                    <div className="rounded-lg bg-white px-2.5 py-1 text-xs font-extrabold text-blue-700 shadow-2xs border border-slate-200/60">
-                      {category.percentage}%
+                    <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200/90">
+                      <div
+                        className={`h-full rounded-full bg-gradient-to-r transition-all duration-500 ease-out ${categoryBarColors[index % categoryBarColors.length]}`}
+                        style={{ width: `${Math.max(percentage, 2)}%` }}
+                      />
                     </div>
                   </div>
-                  <div className="mt-2.5 h-2.5 overflow-hidden rounded-full bg-slate-200/70">
-                    <div
-                      className={`h-2.5 rounded-full bg-gradient-to-r transition-all duration-700 ease-out ${categoryBarColors[index % categoryBarColors.length]}`}
-                      style={{ width: `${category.percentage}%` }}
-                    />
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
-              <div className="flex h-full items-center justify-center text-xs text-slate-400">ไม่พบหมวดหมู่สินค้าที่ค้นหา</div>
+              <div className="flex h-full items-center justify-center text-xs font-semibold text-slate-500">ไม่พบหมวดหมู่สินค้าที่ค้นหา</div>
             )}
           </div>
 
-          <div className="shrink-0 pt-3 mt-2 border-t border-slate-100 flex items-center justify-between text-xs font-medium text-slate-400">
+          <div className="shrink-0 pt-3 mt-1 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600">
             <span>รวม {categories.length} หมวดหมู่</span>
             <button
               type="button"
               onClick={() => setIsViewAllCategoriesOpen(true)}
-              className="flex items-center gap-1 font-bold text-blue-600 hover:text-blue-700 transition"
+              className="flex items-center gap-0.5 font-extrabold text-blue-600 hover:text-blue-700 transition cursor-pointer"
             >
               <span>ดูทั้งหมด ({categories.length})</span>
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        <div className="h-[500px] rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-xs flex flex-col justify-between overflow-hidden">
+        {/* 3. ความสนใจของผู้ใช้ */}
+        <div className="h-[420px] rounded-[28px] border border-slate-200 bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between overflow-hidden">
           <div className="shrink-0 mb-3 border-b border-slate-100 pb-3 space-y-2.5">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-1.5">
+                  <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-1.5">
                     <Heart className="h-5 w-5 text-rose-500 fill-rose-500/20" />
                     <span>ความสนใจของผู้ใช้</span>
                   </h3>
-                  <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold text-rose-700 border border-rose-200/60">
+                  <span className="rounded-full bg-rose-100/80 px-2.5 py-0.5 text-xs font-extrabold text-rose-800 border border-rose-200">
                     {userInterests.length} ตัวเลือก
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-slate-400">สิ่งที่ผู้สมัครเลือกตอนลงทะเบียน</p>
+                <p className="mt-1 text-xs font-semibold text-slate-600">สิ่งที่ผู้สมัครเลือกตอนลงทะเบียน</p>
               </div>
 
               <button
@@ -562,146 +987,75 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 placeholder="ค้นหาตัวเลือกความสนใจ..."
                 value={interestSearch}
                 onChange={(e) => setInterestSearch(e.target.value)}
-                className="w-full rounded-xl border border-slate-200/80 bg-slate-50/70 pl-8 pr-3 py-1.5 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-rose-500 focus:bg-white focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3.5 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-500 focus:border-rose-500 focus:bg-white focus:outline-none"
               />
               {interestSearch && (
                 <button
                   type="button"
                   onClick={() => setInterestSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-4 w-4" />
                 </button>
               )}
             </div>
 
             {interestSuccessMsg && (
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800 animate-in fade-in duration-200">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 animate-in fade-in duration-200">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 <span>{interestSuccessMsg}</span>
               </div>
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
             {filteredInterests.length > 0 ? (
               filteredInterests.map((interest, index) => (
-                <div key={`interest-${interest.name}`} className="group rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 transition-colors hover:bg-rose-50/20">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {index === 0 && <span className="text-xs">🔥</span>}
-                      <div>
-                        <p className="font-bold text-sm text-slate-800">{interest.name}</p>
-                        <p className="mt-0.5 text-xs text-slate-400">{interest.count} คนเลือกสนใจ</p>
-                      </div>
+                <div key={`interest-${interest.name}`} className="group rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 transition-colors hover:bg-rose-50/30">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="min-w-0 pr-2 flex items-center gap-2">
+                      {index === 0 && <span className="text-sm shrink-0">🔥</span>}
+                      <span className="font-extrabold text-sm text-slate-900 truncate">{interest.name}</span>
+                      <span className="text-xs font-bold text-slate-600 shrink-0">({interest.count} คนเลือก)</span>
                     </div>
-                    <div className="rounded-lg bg-white px-2.5 py-1 text-xs font-extrabold text-rose-600 shadow-2xs border border-slate-200/60">
+                    <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-black text-rose-600 shadow-2xs border border-slate-200 shrink-0">
                       {interest.percentage}%
-                    </div>
+                    </span>
                   </div>
-                  <div className="mt-2.5 h-2.5 overflow-hidden rounded-full bg-slate-200/70">
+                  <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200/90">
                     <div
-                      className={`h-2.5 rounded-full bg-gradient-to-r transition-all duration-700 ease-out ${interestBarColors[index % interestBarColors.length]}`}
+                      className={`h-full rounded-full bg-gradient-to-r transition-all duration-500 ease-out ${interestBarColors[index % interestBarColors.length]}`}
                       style={{ width: `${interest.percentage}%` }}
                     />
                   </div>
                 </div>
               ))
             ) : (
-              <div className="flex h-full items-center justify-center text-xs text-slate-400">ไม่พบตัวเลือกความสนใจที่ค้นหา</div>
+              <div className="flex h-full items-center justify-center text-xs font-semibold text-slate-500">ไม่พบตัวเลือกความสนใจที่ค้นหา</div>
             )}
           </div>
 
-          <div className="shrink-0 pt-3 mt-2 border-t border-slate-100 flex items-center justify-between text-xs font-medium text-slate-400">
+          <div className="shrink-0 pt-3 mt-1 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600">
             <span>ผู้เลือก {summary.total_users_with_interests ?? 0} คน</span>
             <button
               type="button"
               onClick={() => setIsViewAllInterestsOpen(true)}
-              className="flex items-center gap-1 font-bold text-rose-600 hover:text-rose-700 transition"
+              className="flex items-center gap-0.5 font-extrabold text-rose-600 hover:text-rose-700 transition cursor-pointer"
             >
               <span>ดูทั้งหมด ({userInterests.length})</span>
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">กิจกรรมและแจ้งเตือนล่าสุด</h3>
-            <p className="mt-0.5 text-xs text-slate-400">คำขอจองและการรายงานปัญหาที่เกิดขึ้นในตลาด</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('/verifications')}
-            className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 transition"
-          >
-            <span>ดูทั้งหมด</span>
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          {recentActivity.length > 0 ? (
-            recentActivity.map((item, index) => {
-              const isApproved = ['approved', 'resolved', 'verified'].includes(item.status?.toLowerCase() || '');
-              const isPending = ['pending', 'progress', 'refund_requested'].includes(item.status?.toLowerCase() || '');
-              const isReport = item.type === 'report';
-
-              return (
-                <div
-                  key={`${item.id ?? 'act'}-${index}`}
-                  onClick={() => {
-                    if (isReport) navigate('/reports');
-                    else if (item.id) navigate(`/verifications?booking_id=${item.id}`);
-                  }}
-                  className="group flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/60 p-4 transition-all duration-200 hover:border-blue-200 hover:bg-white hover:shadow-xs cursor-pointer"
-                >
-                  <div className="flex items-center gap-3.5">
-                    <div
-                      className={`flex h-11 w-11 items-center justify-center rounded-2xl text-white shadow-xs font-bold text-sm shrink-0 ${isReport
-                          ? 'bg-gradient-to-br from-rose-500 to-pink-600'
-                          : 'bg-gradient-to-br from-blue-600 to-indigo-600'
-                        }`}
-                    >
-                      {isReport ? <ShieldAlert className="h-5 w-5" /> : <BadgeCheck className="h-5 w-5" />}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-bold text-sm text-slate-900 group-hover:text-blue-600 transition">{item.title}</p>
-                      <p className="mt-0.5 text-xs text-slate-500 font-medium truncate">{item.message}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4 shrink-0 text-right">
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold ${isApproved
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : isPending
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-rose-100 text-rose-800'
-                        }`}
-                    >
-                      {isApproved && <CheckCircle2 className="h-3.5 w-3.5" />}
-                      {isPending && <Clock className="h-3.5 w-3.5" />}
-                      <span>{item.status_label}</span>
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="p-8 text-center text-xs text-slate-400">ยังไม่มีกิจกรรมล่าสุด</div>
-          )}
-        </div>
-      </section>
+      <MarketMapPreviewSection navigate={navigate} />
 
       {/* ── Add Category Modal Portal ── */}
       {isAddCategoryOpen &&
