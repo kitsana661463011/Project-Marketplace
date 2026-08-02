@@ -20,6 +20,7 @@ import {
   UserRound,
   Layers,
   X,
+  Trash2,
   ZoomIn,
   ZoomOut,
   MapPin,
@@ -45,6 +46,7 @@ type CategoryShareItem = {
 };
 
 type UserInterestItem = {
+  id?: number;
   name: string;
   count: number;
   percentage: number;
@@ -491,6 +493,8 @@ export const Dashboard: React.FC = () => {
   const [interestSearch, setInterestSearch] = useState('');
   const [isViewAllCategoriesOpen, setIsViewAllCategoriesOpen] = useState(false);
   const [isViewAllInterestsOpen, setIsViewAllInterestsOpen] = useState(false);
+  const [deletingCategoryId, setDeletingCategoryId] = useState<string | number | null>(null);
+  const [deletingInterestId, setDeletingInterestId] = useState<number | null>(null);
 
   const loadDashboardData = async () => {
     try {
@@ -577,6 +581,50 @@ export const Dashboard: React.FC = () => {
       alert('เกิดข้อผิดพลาดในการบันทึกตัวเลือกความสนใจใหม่');
     } finally {
       setIsSubmittingInterest(false);
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: string | number) => {
+    if (!window.confirm('คุณต้องการลบหมวดหมู่นี้จริงหรือไม่?')) return;
+
+    setDeletingCategoryId(categoryId);
+    try {
+      const response = await fetch(`/api/v1/categories/${categoryId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.message || 'Failed to delete category');
+      }
+
+      await loadDashboardData();
+    } catch (error: any) {
+      alert(error?.message || 'เกิดข้อผิดพลาดในการลบหมวดหมู่');
+    } finally {
+      setDeletingCategoryId(null);
+    }
+  };
+
+  const handleDeleteInterest = async (interestId: number) => {
+    if (!window.confirm('คุณต้องการลบตัวเลือกความสนใจนี้จริงหรือไม่?')) return;
+
+    setDeletingInterestId(interestId);
+    try {
+      const response = await fetch(`/api/v1/user-interests/${interestId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.message || 'Failed to delete user interest');
+      }
+
+      await loadDashboardData();
+    } catch (error: any) {
+      alert(error?.message || 'เกิดข้อผิดพลาดในการลบตัวเลือกความสนใจ');
+    } finally {
+      setDeletingInterestId(null);
     }
   };
 
@@ -928,9 +976,26 @@ export const Dashboard: React.FC = () => {
                           <span className="text-xs font-bold text-slate-600 shrink-0">({count} ร้านค้า)</span>
                         </div>
                       </div>
-                      <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-black text-blue-700 shadow-2xs border border-slate-200 shrink-0">
-                        {percentage}%
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-black text-blue-700 shadow-2xs border border-slate-200 shrink-0">
+                          {percentage}%
+                        </span>
+                        {category.id != null && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCategory(category.id)}
+                            disabled={deletingCategoryId === category.id}
+                            className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
+                            title="ลบหมวดหมู่"
+                          >
+                            {deletingCategoryId === category.id ? (
+                              <span className="text-[10px] font-semibold">กำลังลบ</span>
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200/90">
                       <div
@@ -1024,9 +1089,26 @@ export const Dashboard: React.FC = () => {
                       <span className="font-extrabold text-sm text-slate-900 truncate">{interest.name}</span>
                       <span className="text-xs font-bold text-slate-600 shrink-0">({interest.count} คนเลือก)</span>
                     </div>
-                    <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-black text-rose-600 shadow-2xs border border-slate-200 shrink-0">
-                      {interest.percentage}%
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-black text-rose-600 shadow-2xs border border-slate-200 shrink-0">
+                        {interest.percentage}%
+                      </span>
+                      {interest.id != null && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteInterest(interest.id)}
+                          disabled={deletingInterestId === interest.id}
+                          className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
+                          title="ลบตัวเลือกความสนใจ"
+                        >
+                          {deletingInterestId === interest.id ? (
+                            <span className="text-[10px] font-semibold">กำลังลบ</span>
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200/90">
                     <div
@@ -1260,11 +1342,28 @@ export const Dashboard: React.FC = () => {
                   {filteredCategories.length > 0 ? (
                     filteredCategories.map((category, index) => (
                       <div key={`all-cat-${category.name}`} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 space-y-2">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <span className="font-bold text-sm text-slate-800">{category.name}</span>
-                          <span className="rounded-lg bg-white px-2 py-1 text-xs font-extrabold text-blue-700 shadow-2xs border border-slate-200/60">
-                            {category.percentage}%
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-lg bg-white px-2 py-1 text-xs font-extrabold text-blue-700 shadow-2xs border border-slate-200/60">
+                              {category.percentage}%
+                            </span>
+                            {category.id != null && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCategory(category.id)}
+                                disabled={deletingCategoryId === category.id}
+                                className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
+                                title="ลบหมวดหมู่"
+                              >
+                                {deletingCategoryId === category.id ? (
+                                  <span className="text-[10px] font-semibold">กำลังลบ</span>
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <p className="text-xs text-slate-400">{category.count} ร้านค้าในหมวดหมู่นี้</p>
                         <div className="h-2 overflow-hidden rounded-full bg-slate-200/70">
@@ -1350,14 +1449,31 @@ export const Dashboard: React.FC = () => {
                   {filteredInterests.length > 0 ? (
                     filteredInterests.map((interest, index) => (
                       <div key={`all-int-${interest.name}`} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 space-y-2">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
                             {index === 0 && <span className="text-xs">🔥</span>}
                             <span className="font-bold text-sm text-slate-800">{interest.name}</span>
                           </div>
-                          <span className="rounded-lg bg-white px-2 py-1 text-xs font-extrabold text-rose-600 shadow-2xs border border-slate-200/60">
-                            {interest.percentage}%
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-lg bg-white px-2 py-1 text-xs font-extrabold text-rose-600 shadow-2xs border border-slate-200/60">
+                              {interest.percentage}%
+                            </span>
+                            {interest.id != null && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteInterest(interest.id)}
+                                disabled={deletingInterestId === interest.id}
+                                className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
+                                title="ลบตัวเลือกความสนใจ"
+                              >
+                                {deletingInterestId === interest.id ? (
+                                  <span className="text-[10px] font-semibold">กำลังลบ</span>
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <p className="text-xs text-slate-400">{interest.count} คนเลือกสนใจ</p>
                         <div className="h-2 overflow-hidden rounded-full bg-slate-200/70">
