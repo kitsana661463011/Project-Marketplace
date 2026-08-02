@@ -475,10 +475,10 @@ export const MarketMapPage: React.FC = () => {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'available': return 'ว่างพร้อมเช่า';
+      case 'available': return 'ว่าง';
       case 'occupied': return 'กำลังรอจอง';
       case 'approved': return 'มีผู้เช่าแล้ว';
-      case 'repair': return 'ปรับปรุงซ่อมแซม';
+      case 'repair': return 'ปิดปรับปรุง';
       default: return status;
     }
   };
@@ -885,7 +885,7 @@ export const MarketMapPage: React.FC = () => {
               <Check size={18} />
             </div>
             <div>
-              <p className="text-xs font-extrabold text-emerald-800 uppercase tracking-wide">ว่างพร้อมเช่า</p>
+              <p className="text-xs font-extrabold text-emerald-800 uppercase tracking-wide">แผงค้าว่าง</p>
               <p className="text-xl font-black text-emerald-900 mt-0.5">{availableCount} <span className="text-xs font-bold text-emerald-700">แผง</span></p>
             </div>
           </div>
@@ -924,7 +924,7 @@ export const MarketMapPage: React.FC = () => {
               <AlertCircle size={18} />
             </div>
             <div>
-              <p className="text-xs font-extrabold text-amber-800 uppercase tracking-wide">อยู่ระหว่างปรับปรุง</p>
+              <p className="text-xs font-extrabold text-amber-800 uppercase tracking-wide">ปิดปรับปรุง</p>
               <p className="text-xl font-black text-amber-900 mt-0.5">{repairCount} <span className="text-xs font-bold text-amber-700">แผง</span></p>
             </div>
           </div>
@@ -1515,7 +1515,7 @@ export const MarketMapPage: React.FC = () => {
               <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
                 {/* Type Selection */}
                 <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200 space-y-3">
-                  <p className="font-black text-slate-800 uppercase tracking-wider text-[11px]">1. ประเภทวัตถุ & โซน</p>
+                  <p className="font-black text-slate-800 uppercase tracking-wider text-[11px]">1. ประเภทวัตถุ, ขนาด & สถานะ</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="font-bold text-slate-700">ประเภทวัตถุ</label>
@@ -1553,6 +1553,39 @@ export const MarketMapPage: React.FC = () => {
                           ))}
                         </select>
                       </div>
+                    )}
+
+                    {editItemType === 'block' && (
+                      <>
+                        <div>
+                          <label className="font-bold text-slate-700">ขนาดแผง</label>
+                          <input
+                            type="text"
+                            value={editSize}
+                            onChange={(e) => setEditSize(e.target.value)}
+                            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                            placeholder="เช่น 3x3 เมตร"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-bold text-slate-700">สถานะแผง</label>
+                          <select
+                            value={editStatus}
+                            disabled={['occupied', 'approved'].includes(editingStall.status)}
+                            onChange={(e) => setEditStatus(e.target.value)}
+                            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="available">ว่าง</option>
+                            <option value="repair">ปิดปรับปรุง</option>
+                            {['occupied', 'approved'].includes(editingStall.status) && (
+                              <option value={editingStall.status} disabled>
+                                {getStatusLabel(editingStall.status)}
+                              </option>
+                            )}
+                          </select>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1699,6 +1732,32 @@ export const MarketMapPage: React.FC = () => {
 
                 {createItemType === 'block' && (
                   <div className="space-y-4 rounded-2xl bg-indigo-50/50 p-4 border border-indigo-100">
+                    {/* ขนาดแผง & สถานะแผง */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-700">ขนาดแผง</label>
+                        <input
+                          type="text"
+                          value={createSize}
+                          onChange={(e) => setCreateSize(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                          placeholder="เช่น 3x3 เมตร"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-bold text-slate-700">สถานะแผง</label>
+                        <select
+                          value={createStatus}
+                          onChange={(e) => setCreateStatus(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="available">ว่าง</option>
+                          <option value="repair">ปิดปรับปรุง</option>
+                        </select>
+                      </div>
+                    </div>
+
                     <div>
                       <label className="font-bold text-slate-700">รูปแบบการเช่า</label>
                       <div className="grid grid-cols-2 gap-3 mt-1.5">
