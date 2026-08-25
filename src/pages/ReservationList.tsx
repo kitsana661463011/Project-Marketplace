@@ -1957,9 +1957,9 @@ export const AnnouncementsPage: React.FC = () => {
 
   const categoryOptions = [
     { label: 'ทั้งหมด', value: 'all' },
+    { label: 'ประกาศทั่วไป', value: 'general' },
     { label: 'ประกาศด่วน', value: 'urgent' },
     { label: 'กิจกรรม', value: 'event' },
-    { label: 'ทั่วไป', value: 'general' },
   ] as const;
 
   const loadAnnouncements = async () => {
@@ -2047,9 +2047,9 @@ export const AnnouncementsPage: React.FC = () => {
       case 'event':
         return { label: 'กิจกรรม', className: 'bg-violet-50 text-violet-700 border-violet-200' };
       case 'general':
-        return { label: 'ทั่วไป', className: 'bg-slate-100 text-slate-700 border-slate-200' };
+        return { label: 'ประกาศทั่วไป', className: 'bg-slate-100 text-slate-700 border-slate-200' };
       default:
-        return { label: 'ทั่วไป', className: 'bg-slate-100 text-slate-700 border-slate-200' };
+        return { label: 'ประกาศทั่วไป', className: 'bg-slate-100 text-slate-700 border-slate-200' };
     }
   };
 
@@ -2418,9 +2418,9 @@ export const AnnouncementsPage: React.FC = () => {
                     onChange={(event) => setForm((current) => ({ ...current, category: event.target.value as Announcement['category'] }))}
                     className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                   >
+                    <option value="general">ประกาศทั่วไป</option>
                     <option value="urgent">ประกาศด่วน</option>
                     <option value="event">กิจกรรม</option>
-                    <option value="general">ทั่วไป</option>
                   </select>
                 </div>
 

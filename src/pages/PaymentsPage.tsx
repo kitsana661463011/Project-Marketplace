@@ -90,7 +90,7 @@ const PaymentsPage: React.FC = () => {
   const [selectedPayment, setSelectedPayment] = useState<any | null>(null);
   const [selectedSlip, setSelectedSlip] = useState<string | null>(null);
   const [slipImageError, setSlipImageError] = useState<Record<string, boolean>>({});
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'refund_requested' | 'refunded'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'verified' | 'refunded'>('all');
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
@@ -161,8 +161,14 @@ const PaymentsPage: React.FC = () => {
     setCurrentPage(1);
   }, [statusFilter, search]);
 
+  const historyPayments = useMemo(() => {
+    return payments.filter(
+      (p) => p.status === 'verified' || p.status === 'success' || p.status === 'refunded'
+    );
+  }, [payments]);
+
   const filteredAndSortedPayments = useMemo(() => {
-    let list = [...payments];
+    let list = [...historyPayments];
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -174,33 +180,20 @@ const PaymentsPage: React.FC = () => {
       });
     }
 
-    if (statusFilter !== 'all') {
-      list = list.filter((p) => p.status === statusFilter);
+    if (statusFilter === 'verified') {
+      list = list.filter((p) => p.status === 'verified' || p.status === 'success');
+    } else if (statusFilter === 'refunded') {
+      list = list.filter((p) => p.status === 'refunded');
     }
 
-    const statusPriority: Record<string, number> = {
-      pending: 1,
-      refund_requested: 2,
-      refunded: 3,
-      verified: 4,
-      success: 4,
-    };
-
     list.sort((a, b) => {
-      const priorityA = statusPriority[a.status] || 99;
-      const priorityB = statusPriority[b.status] || 99;
-
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
-      }
-
       const dateA = a.payment_date ? new Date(a.payment_date).getTime() : 0;
       const dateB = b.payment_date ? new Date(b.payment_date).getTime() : 0;
       return dateB - dateA;
     });
 
     return list;
-  }, [payments, statusFilter, search]);
+  }, [historyPayments, statusFilter, search]);
 
   const totalPages = Math.ceil(filteredAndSortedPayments.length / itemsPerPage);
   const activePage = Math.min(currentPage, Math.max(totalPages, 1));
@@ -221,7 +214,7 @@ const PaymentsPage: React.FC = () => {
       const paymentIdParam = searchParams.get('payment_id');
       const statusParam = searchParams.get('status');
 
-      if (statusParam && ['all', 'pending', 'verified', 'refund_requested', 'refunded'].includes(statusParam)) {
+      if (statusParam && ['all', 'verified', 'refunded'].includes(statusParam)) {
         setStatusFilter(statusParam as any);
       }
 
@@ -376,13 +369,11 @@ const PaymentsPage: React.FC = () => {
   };
 
   const summaryStats = useMemo(() => {
-    const total = payments.length;
-    const pending = payments.filter((p) => p.status === 'pending').length;
-    const refundRequested = payments.filter((p) => p.status === 'refund_requested').length;
-    const refunded = payments.filter((p) => p.status === 'refunded').length;
-    const verified = payments.filter((p) => p.status === 'verified' || p.status === 'success').length;
-    return { total, pending, refundRequested, refunded, verified };
-  }, [payments]);
+    const total = historyPayments.length;
+    const refunded = historyPayments.filter((p) => p.status === 'refunded').length;
+    const verified = historyPayments.filter((p) => p.status === 'verified' || p.status === 'success').length;
+    return { total, refunded, verified };
+  }, [historyPayments]);
 
   return (
     <div className="space-y-8 pb-12">
@@ -562,9 +553,9 @@ const PaymentsPage: React.FC = () => {
           document.body
         )}
 
-      {/* ── Summary KPI Overview Cards ── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {/* 1. All */}
+      {/* ── Summary KPI Overview Cards (ประวัติการชำระเงิน) ── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* 1. All History */}
         <div
           onClick={() => setStatusFilter('all')}
           className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'all'
@@ -584,47 +575,7 @@ const PaymentsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 2. Pending */}
-        <div
-          onClick={() => setStatusFilter('pending')}
-          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'pending'
-              ? 'border-amber-400 bg-white ring-2 ring-amber-400/30 shadow-md'
-              : 'border-slate-200/80 bg-white hover:border-amber-300'
-            }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-amber-900 uppercase tracking-wider">รอตรวจสอบ</span>
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
-              <Clock className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-baseline justify-between">
-            <p className="text-3xl font-black text-amber-700 tracking-tight">{summaryStats.pending}</p>
-            <span className="text-xs font-extrabold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-md">ต้องตรวจสอบ</span>
-          </div>
-        </div>
-
-        {/* 3. Refund Requested */}
-        <div
-          onClick={() => setStatusFilter('refund_requested')}
-          className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'refund_requested'
-              ? 'border-purple-400 bg-white ring-2 ring-purple-400/30 shadow-md'
-              : 'border-slate-200/80 bg-white hover:border-purple-300'
-            }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-purple-900 uppercase tracking-wider">ขอคืนเงิน</span>
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
-              <Receipt className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-baseline justify-between">
-            <p className="text-3xl font-black text-purple-700 tracking-tight">{summaryStats.refundRequested}</p>
-            <span className="text-xs font-extrabold text-purple-800 bg-purple-50 px-2.5 py-1 rounded-md">คำร้องขอคืนเงิน</span>
-          </div>
-        </div>
-
-        {/* 4. Refunded */}
+        {/* 2. Refunded */}
         <div
           onClick={() => setStatusFilter('refunded')}
           className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'refunded'
@@ -644,7 +595,7 @@ const PaymentsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 5. Verified Success (Last) */}
+        {/* 3. Verified Success */}
         <div
           onClick={() => setStatusFilter('verified')}
           className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'verified'
@@ -698,10 +649,8 @@ const PaymentsPage: React.FC = () => {
                 className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 outline-none transition focus:border-sky-500 cursor-pointer shadow-2xs"
               >
                 <option value="all">ทั้งหมด</option>
-                <option value="pending">รอตรวจสอบ</option>
-                <option value="verified">สำเร็จ</option>
-                <option value="refund_requested">ขอคืนเงิน</option>
                 <option value="refunded">คืนเงินแล้ว</option>
+                <option value="verified">สำเร็จ</option>
               </select>
             </div>
           </div>
