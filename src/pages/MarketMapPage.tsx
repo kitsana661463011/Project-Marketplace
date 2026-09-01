@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Plus, Trash2, ZoomIn, ZoomOut, Maximize2, Move, Hand, X, Check, Save, Lock, Unlock, Eye, Grid, RefreshCw, Folder, AlertCircle, HelpCircle, Store, Edit3, User, DollarSign, ChevronDown, CreditCard
+  Plus, Trash2, ZoomIn, ZoomOut, Maximize2, Move, Hand, X, Check, Save, Lock, Unlock, Eye, Grid, RefreshCw, Folder, AlertCircle, HelpCircle, Store, Edit3, User, DollarSign, ChevronDown, CreditCard, Zap, Droplets
 } from 'lucide-react';
 
 export interface ExtendedMarketZone {
@@ -23,6 +23,8 @@ export interface ExtendedMarketZone {
   monthly_price?: number | null;
   entry_fee?: number | null;
   security_deposit?: number | null;
+  has_electricity?: boolean;
+  has_water?: boolean;
   item_type: 'block' | 'road' | 'zone' | 'entrance' | 'toilet' | 'exit' | 'dining' | 'parking' | 'info' | 'trash';
   stall_id?: number | null;
   zone_id?: number | null;
@@ -104,6 +106,8 @@ export const MarketMapPage: React.FC = () => {
   const [editMonthlyPrice, setEditMonthlyPrice] = useState<number>(5000);
   const [editEntryFee, setEditEntryFee] = useState<number>(1000);
   const [editSecurityDeposit, setEditSecurityDeposit] = useState<number>(2000);
+  const [editHasElectricity, setEditHasElectricity] = useState<boolean>(true);
+  const [editHasWater, setEditHasWater] = useState<boolean>(true);
   const [editZoneId, setEditZoneId] = useState<number | null>(null);
   const [editItemType, setEditItemType] = useState<ExtendedMarketZone['item_type']>('block');
 
@@ -117,6 +121,8 @@ export const MarketMapPage: React.FC = () => {
   const [createMonthlyPrice, setCreateMonthlyPrice] = useState<number>(5000);
   const [createEntryFee, setCreateEntryFee] = useState<number>(1000);
   const [createSecurityDeposit, setCreateSecurityDeposit] = useState<number>(2000);
+  const [createHasElectricity, setCreateHasElectricity] = useState<boolean>(true);
+  const [createHasWater, setCreateHasWater] = useState<boolean>(true);
   const [createZoneId, setCreateZoneId] = useState<number | null>(null);
   const [createStatus, setCreateStatus] = useState<string>('available');
   const [createWidth, setCreateWidth] = useState<number>(80);
@@ -220,6 +226,8 @@ export const MarketMapPage: React.FC = () => {
           monthly_price: item.monthly_price !== undefined && item.monthly_price !== null ? Number(item.monthly_price) : null,
           entry_fee: item.entry_fee !== undefined && item.entry_fee !== null ? Number(item.entry_fee) : null,
           security_deposit: item.security_deposit !== undefined && item.security_deposit !== null ? Number(item.security_deposit) : null,
+          has_electricity: item.has_electricity !== undefined ? Boolean(item.has_electricity) : true,
+          has_water: item.has_water !== undefined ? Boolean(item.has_water) : true,
           seller: item.seller || undefined,
         } as ExtendedMarketZone;
       });
@@ -291,6 +299,8 @@ export const MarketMapPage: React.FC = () => {
           monthly_price: s.rental_type === 'monthly' ? (s.monthly_price ?? 5000) : null,
           entry_fee: s.rental_type === 'monthly' ? (s.entry_fee ?? 1000) : null,
           security_deposit: s.rental_type === 'monthly' ? (s.security_deposit ?? 2000) : null,
+          has_electricity: s.has_electricity ?? true,
+          has_water: s.has_water ?? true,
           status: s.status || null,
         }))
       };
@@ -340,6 +350,8 @@ export const MarketMapPage: React.FC = () => {
     setEditMonthlyPrice(stall.monthly_price ?? 5000);
     setEditEntryFee(stall.entry_fee ?? 1000);
     setEditSecurityDeposit(stall.security_deposit ?? 2000);
+    setEditHasElectricity(stall.has_electricity ?? true);
+    setEditHasWater(stall.has_water ?? true);
     setEditZoneId(stall.zone_id || null);
     setEditItemType(stall.item_type || 'block');
     setShowDetailModal(true);
@@ -373,6 +385,8 @@ export const MarketMapPage: React.FC = () => {
           monthly_price: editRentalType === 'monthly' ? editMonthlyPrice : null,
           entry_fee: editRentalType === 'monthly' ? editEntryFee : null,
           security_deposit: editRentalType === 'monthly' ? editSecurityDeposit : null,
+          has_electricity: editHasElectricity,
+          has_water: editHasWater,
           zone_id: (editItemType === 'block' || editItemType === 'zone') ? editZoneId : null,
           item_type: editItemType,
           x: newX,
@@ -600,6 +614,8 @@ export const MarketMapPage: React.FC = () => {
           monthly_price: createRentalType === 'monthly' ? createMonthlyPrice : null,
           entry_fee: createRentalType === 'monthly' ? createEntryFee : null,
           security_deposit: createRentalType === 'monthly' ? createSecurityDeposit : null,
+          has_electricity: createItemType === 'block' ? createHasElectricity : true,
+          has_water: createItemType === 'block' ? createHasWater : true,
           item_type: createItemType,
           zone_id: (createItemType === 'block' || createItemType === 'zone') ? createZoneId : null,
         };
@@ -1387,55 +1403,83 @@ export const MarketMapPage: React.FC = () => {
 
                 {/* Rental & Pricing Details Card */}
                 {selectedStall.item_type === 'block' && (
-                  <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200/80 space-y-3">
-                    <h5 className="font-black text-slate-800 text-xs flex items-center gap-1.5 uppercase tracking-wider">
-                      <CreditCard size={14} className="text-indigo-600" />
-                      อัตราค่าเช่า & รูปแบบสัญญา
-                    </h5>
+                  <>
+                    <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200/80 space-y-3">
+                      <h5 className="font-black text-slate-800 text-xs flex items-center gap-1.5 uppercase tracking-wider">
+                        <CreditCard size={14} className="text-indigo-600" />
+                        อัตราค่าเช่า & รูปแบบสัญญา
+                      </h5>
 
-                    <div className="space-y-2 pt-1">
-                      <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
-                        <span className="text-slate-500 font-medium">ประเภทการเช่า:</span>
-                        <span className="font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-100">
-                          {selectedStall.rental_type === 'monthly' ? 'เช่ารายเดือน' : 'เช่ารายวัน'}
-                        </span>
-                      </div>
-
-                      {selectedStall.rental_type === 'monthly' ? (
-                        <>
-                          <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
-                            <span className="text-slate-500 font-medium">ค่าเช่ารายเดือน:</span>
-                            <span className="font-black text-slate-900 font-mono text-sm">
-                              ฿{(selectedStall.monthly_price || selectedStall.price || 0).toLocaleString()} / เดือน
-                            </span>
-                          </div>
-                          {selectedStall.entry_fee !== null && (
-                            <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
-                              <span className="text-slate-500 font-medium">ค่าแรกเข้า:</span>
-                              <span className="font-bold text-slate-800 font-mono">
-                                ฿{(selectedStall.entry_fee || 0).toLocaleString()}
-                              </span>
-                            </div>
-                          )}
-                          {selectedStall.security_deposit !== null && (
-                            <div className="flex justify-between items-center py-1">
-                              <span className="text-slate-500 font-medium">เงินประกัน:</span>
-                              <span className="font-bold text-slate-800 font-mono">
-                                ฿{(selectedStall.security_deposit || 0).toLocaleString()}
-                              </span>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="flex justify-between items-center py-1">
-                          <span className="text-slate-500 font-medium">ค่าเช่ารายวัน:</span>
-                          <span className="font-black text-emerald-700 font-mono text-sm">
-                            ฿{(selectedStall.daily_price || selectedStall.price || 0).toLocaleString()} / วัน
+                      <div className="space-y-2 pt-1">
+                        <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                          <span className="text-slate-500 font-medium">ประเภทการเช่า:</span>
+                          <span className="font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-100">
+                            {selectedStall.rental_type === 'monthly' ? 'เช่ารายเดือน' : 'เช่ารายวัน'}
                           </span>
                         </div>
-                      )}
+
+                        {selectedStall.rental_type === 'monthly' ? (
+                          <>
+                            <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                              <span className="text-slate-500 font-medium">ค่าเช่ารายเดือน:</span>
+                              <span className="font-black text-slate-900 font-mono text-sm">
+                                ฿{(selectedStall.monthly_price || selectedStall.price || 0).toLocaleString()} / เดือน
+                              </span>
+                            </div>
+                            {selectedStall.entry_fee !== null && (
+                              <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                                <span className="text-slate-500 font-medium">ค่าแรกเข้า:</span>
+                                <span className="font-bold text-slate-800 font-mono">
+                                  ฿{(selectedStall.entry_fee || 0).toLocaleString()}
+                                </span>
+                              </div>
+                            )}
+                            {selectedStall.security_deposit !== null && (
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-slate-500 font-medium">เงินประกัน:</span>
+                                <span className="font-bold text-slate-800 font-mono">
+                                  ฿{(selectedStall.security_deposit || 0).toLocaleString()}
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="text-slate-500 font-medium">ค่าเช่ารายวัน:</span>
+                            <span className="font-black text-emerald-700 font-mono text-sm">
+                              ฿{(selectedStall.daily_price || selectedStall.price || 0).toLocaleString()} / วัน
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+
+                    {/* Stall Facilities / Utilities */}
+                    <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200/80 space-y-2.5">
+                      <h5 className="font-black text-slate-800 text-xs flex items-center gap-1.5 uppercase tracking-wider">
+                        <Zap size={14} className="text-amber-500" />
+                        สิ่งอำนวยความสะดวกประจำแผง
+                      </h5>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs border ${
+                          selectedStall.has_electricity !== false
+                            ? 'bg-amber-50 text-amber-800 border-amber-200 shadow-xs'
+                            : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                        }`}>
+                          <Zap size={13} className={selectedStall.has_electricity !== false ? 'text-amber-600' : 'text-slate-400'} />
+                          ไฟฟ้าพร้อมใช้
+                        </span>
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs border ${
+                          selectedStall.has_water !== false
+                            ? 'bg-blue-50 text-blue-800 border-blue-200 shadow-xs'
+                            : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                        }`}>
+                          <Droplets size={13} className={selectedStall.has_water !== false ? 'text-blue-600' : 'text-slate-400'} />
+                          น้ำประปา
+                        </span>
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 {/* Seller Info if Occupied */}
@@ -1677,6 +1721,51 @@ export const MarketMapPage: React.FC = () => {
                     )}
                   </div>
                 )}
+
+                {/* Facilities & Utilities (For Stalls) */}
+                {editItemType === 'block' && (
+                  <div className="rounded-2xl bg-amber-50/50 p-4 border border-amber-100 space-y-3">
+                    <p className="font-black text-amber-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <Zap size={14} className="text-amber-600" />
+                      3. สิ่งอำนวยความสะดวกประจำแผง
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        editHasElectricity
+                          ? 'bg-amber-100/70 border-amber-300 text-amber-950 font-bold'
+                          : 'bg-white border-slate-200 text-slate-500 font-medium hover:bg-slate-50'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={editHasElectricity}
+                          onChange={(e) => setEditHasElectricity(e.target.checked)}
+                          className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 accent-amber-600"
+                        />
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <Zap size={14} className={editHasElectricity ? 'text-amber-600' : 'text-slate-400'} />
+                          <span>ไฟฟ้าพร้อมใช้</span>
+                        </div>
+                      </label>
+
+                      <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        editHasWater
+                          ? 'bg-blue-100/70 border-blue-300 text-blue-950 font-bold'
+                          : 'bg-white border-slate-200 text-slate-500 font-medium hover:bg-slate-50'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={editHasWater}
+                          onChange={(e) => setEditHasWater(e.target.checked)}
+                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 accent-blue-600"
+                        />
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <Droplets size={14} className={editHasWater ? 'text-blue-600' : 'text-slate-400'} />
+                          <span>น้ำประปา</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Modal Actions Footer */}
@@ -1833,6 +1922,46 @@ export const MarketMapPage: React.FC = () => {
                         </div>
                       </div>
                     )}
+
+                    {/* Facilities / Utilities Selection */}
+                    <div className="pt-2 border-t border-indigo-100">
+                      <label className="font-bold text-slate-700 block mb-2">สิ่งอำนวยความสะดวกประจำแผง (เริ่มต้น: มีครบ)</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                          createHasElectricity
+                            ? 'bg-amber-50 border-amber-300 text-amber-950 font-bold'
+                            : 'bg-white border-slate-200 text-slate-500 font-medium hover:bg-slate-50'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={createHasElectricity}
+                            onChange={(e) => setCreateHasElectricity(e.target.checked)}
+                            className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 accent-amber-600"
+                          />
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <Zap size={14} className={createHasElectricity ? 'text-amber-600' : 'text-slate-400'} />
+                            <span>ไฟฟ้าพร้อมใช้</span>
+                          </div>
+                        </label>
+
+                        <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                          createHasWater
+                            ? 'bg-blue-50 border-blue-300 text-blue-950 font-bold'
+                            : 'bg-white border-slate-200 text-slate-500 font-medium hover:bg-slate-50'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={createHasWater}
+                            onChange={(e) => setCreateHasWater(e.target.checked)}
+                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 accent-blue-600"
+                          />
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <Droplets size={14} className={createHasWater ? 'text-blue-600' : 'text-slate-400'} />
+                            <span>น้ำประปา</span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

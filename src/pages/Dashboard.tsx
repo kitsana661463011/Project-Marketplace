@@ -18,6 +18,9 @@ import {
   Heart,
   Search,
   UserRound,
+  Zap,
+  Droplets,
+  AlertTriangle,
   Layers,
   X,
   Trash2,
@@ -145,6 +148,8 @@ const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = 
             monthly_price: item.monthly_price !== undefined && item.monthly_price !== null ? Number(item.monthly_price) : null,
             entry_fee: item.entry_fee !== undefined && item.entry_fee !== null ? Number(item.entry_fee) : null,
             security_deposit: item.security_deposit !== undefined && item.security_deposit !== null ? Number(item.security_deposit) : null,
+            has_electricity: item.has_electricity !== undefined ? Boolean(item.has_electricity) : true,
+            has_water: item.has_water !== undefined ? Boolean(item.has_water) : true,
             seller: item.seller,
           }))
         );
@@ -448,6 +453,26 @@ const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = 
                     }`}>
                       {['occupied', 'approved', 'verified'].includes(selectedItem.status) ? 'มีผู้เช่าแล้ว' : 'ว่างพร้อมเช่า'}
                     </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-0.5 pt-1 border-t border-slate-100">
+                    <span className="text-slate-500">สาธารณูปโภค:</span>
+                    <div className="flex gap-1">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${
+                        selectedItem.has_electricity !== false
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-slate-100 text-slate-400 line-through'
+                      }`}>
+                        <Zap size={10} /> ไฟฟ้า
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${
+                        selectedItem.has_water !== false
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-slate-100 text-slate-400 line-through'
+                      }`}>
+                        <Droplets size={10} /> น้ำ
+                      </span>
+                    </div>
                   </div>
                 </>
               )}
