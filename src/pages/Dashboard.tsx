@@ -20,7 +20,6 @@ import {
   UserRound,
   Zap,
   Droplets,
-  AlertTriangle,
   Layers,
   X,
   Trash2,
@@ -29,6 +28,7 @@ import {
   MapPin,
   Maximize2,
   RefreshCw,
+  Pencil,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -46,6 +46,7 @@ type CategoryShareItem = {
   count?: number;
   value?: number;
   percentage?: number;
+  description?: string;
 };
 
 type UserInterestItem = {
@@ -97,18 +98,19 @@ type DashboardPayload = {
 };
 
 const categoryBarColors = [
-  'from-blue-500 to-cyan-400',
-  'from-emerald-500 to-teal-400',
-  'from-amber-500 to-orange-400',
-  'from-violet-500 to-purple-400',
+  'from-blue-500 to-indigo-500',
+  'from-sky-500 to-blue-500',
+  'from-teal-500 to-emerald-500',
+  'from-indigo-500 to-purple-500',
+  'from-slate-500 to-slate-600',
 ];
 
 const interestBarColors = [
-  'from-rose-500 to-pink-400',
-  'from-purple-500 to-indigo-400',
-  'from-blue-500 to-sky-400',
-  'from-amber-500 to-yellow-400',
-  'from-emerald-500 to-teal-400',
+  'from-blue-500 to-indigo-500',
+  'from-sky-500 to-cyan-500',
+  'from-teal-500 to-emerald-500',
+  'from-indigo-500 to-violet-500',
+  'from-slate-500 to-slate-600',
 ];
 
 const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = ({ navigate }) => {
@@ -446,11 +448,10 @@ const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = 
 
                   <div className="flex justify-between py-0.5">
                     <span className="text-slate-500">สถานะ:</span>
-                    <span className={`font-extrabold px-2 py-0.5 rounded-full text-[10px] ${
-                      ['occupied', 'approved', 'verified'].includes(selectedItem.status)
-                        ? 'bg-rose-100 text-rose-800'
-                        : 'bg-emerald-100 text-emerald-800'
-                    }`}>
+                    <span className={`font-extrabold px-2 py-0.5 rounded-full text-[10px] ${['occupied', 'approved', 'verified'].includes(selectedItem.status)
+                      ? 'bg-rose-100 text-rose-800'
+                      : 'bg-emerald-100 text-emerald-800'
+                      }`}>
                       {['occupied', 'approved', 'verified'].includes(selectedItem.status) ? 'มีผู้เช่าแล้ว' : 'ว่างพร้อมเช่า'}
                     </span>
                   </div>
@@ -458,18 +459,16 @@ const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = 
                   <div className="flex justify-between items-center py-0.5 pt-1 border-t border-slate-100">
                     <span className="text-slate-500">สาธารณูปโภค:</span>
                     <div className="flex gap-1">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${
-                        selectedItem.has_electricity !== false
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-slate-100 text-slate-400 line-through'
-                      }`}>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${selectedItem.has_electricity !== false
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-slate-100 text-slate-400 line-through'
+                        }`}>
                         <Zap size={10} /> ไฟฟ้า
                       </span>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${
-                        selectedItem.has_water !== false
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-slate-100 text-slate-400 line-through'
-                      }`}>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${selectedItem.has_water !== false
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-slate-100 text-slate-400 line-through'
+                        }`}>
                         <Droplets size={10} /> น้ำ
                       </span>
                     </div>
@@ -513,6 +512,19 @@ export const Dashboard: React.FC = () => {
   const [interestName, setInterestName] = useState('');
   const [isSubmittingInterest, setIsSubmittingInterest] = useState(false);
   const [interestSuccessMsg, setInterestSuccessMsg] = useState('');
+
+  // Edit Category state
+  const [isEditCategoryOpen, setIsEditCategoryOpen] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | number | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [editingCategoryDesc, setEditingCategoryDesc] = useState('');
+  const [isSubmittingEditCategory, setIsSubmittingEditCategory] = useState(false);
+
+  // Edit Interest state
+  const [isEditInterestOpen, setIsEditInterestOpen] = useState(false);
+  const [editingInterestId, setEditingInterestId] = useState<number | null>(null);
+  const [editingInterestName, setEditingInterestName] = useState('');
+  const [isSubmittingEditInterest, setIsSubmittingEditInterest] = useState(false);
 
   const [categorySearch, setCategorySearch] = useState('');
   const [interestSearch, setInterestSearch] = useState('');
@@ -653,6 +665,80 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  const handleOpenEditCategory = (cat: CategoryShareItem) => {
+    setEditingCategoryId(cat.id ?? null);
+    setEditingCategoryName(cat.name);
+    setEditingCategoryDesc(cat.description ?? '');
+    setIsEditCategoryOpen(true);
+  };
+
+  const handleUpdateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategoryId || !editingCategoryName.trim()) return;
+
+    setIsSubmittingEditCategory(true);
+    try {
+      const response = await fetch(`/api/v1/categories/${editingCategoryId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category_name: editingCategoryName.trim(),
+          description: editingCategoryDesc.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(err?.message || 'Failed to update category');
+      }
+
+      setIsEditCategoryOpen(false);
+      setCategorySuccessMsg('แก้ไขหมวดหมู่สินค้าเรียบร้อยแล้ว!');
+      setTimeout(() => setCategorySuccessMsg(''), 4000);
+      await loadDashboardData();
+    } catch (error: any) {
+      alert(error?.message || 'เกิดข้อผิดพลาดในการแก้ไขหมวดหมู่สินค้า');
+    } finally {
+      setIsSubmittingEditCategory(false);
+    }
+  };
+
+  const handleOpenEditInterest = (interest: UserInterestItem) => {
+    setEditingInterestId(interest.id ?? null);
+    setEditingInterestName(interest.name);
+    setIsEditInterestOpen(true);
+  };
+
+  const handleUpdateInterest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingInterestId || !editingInterestName.trim()) return;
+
+    setIsSubmittingEditInterest(true);
+    try {
+      const response = await fetch(`/api/v1/user-interests/${editingInterestId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          interest_name: editingInterestName.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(err?.message || 'Failed to update user interest');
+      }
+
+      setIsEditInterestOpen(false);
+      setInterestSuccessMsg('แก้ไขตัวเลือกความสนใจเรียบร้อยแล้ว!');
+      setTimeout(() => setInterestSuccessMsg(''), 4000);
+      await loadDashboardData();
+    } catch (error: any) {
+      alert(error?.message || 'เกิดข้อผิดพลาดในการแก้ไขตัวเลือกความสนใจ');
+    } finally {
+      setIsSubmittingEditInterest(false);
+    }
+  };
+
   useEffect(() => {
     void loadDashboardData();
   }, []);
@@ -674,22 +760,21 @@ export const Dashboard: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate('/reports')}
-          className="group relative overflow-hidden rounded-[24px] border border-rose-100 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-rose-300 hover:shadow-lg hover:shadow-rose-500/10 cursor-pointer"
+          className="group relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white p-6 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-rose-200 hover:shadow-md cursor-pointer"
         >
-          <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-rose-500 to-pink-500" />
-          <div className="flex items-center justify-between pl-2">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">แจ้งเหตุ/ปัญหา</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/30 group-hover:scale-110 transition-transform">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 border border-rose-100/80 text-rose-600 transition-transform group-hover:scale-105">
               <ShieldAlert className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4 pl-2">
+          <div className="mt-4">
             <div className="flex items-baseline gap-1.5">
-              <p className="text-3xl font-black tracking-tight text-rose-600">{summary.pending_reports ?? 0}</p>
+              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.pending_reports ?? 0}</p>
               <span className="text-sm font-semibold text-slate-400">เคส</span>
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-rose-600">
-              <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping" />
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-rose-600">
+              <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
               <span>ต้องตรวจสอบ / ซ่อมแซมด่วน</span>
             </div>
           </div>
@@ -700,22 +785,21 @@ export const Dashboard: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate('/verifications')}
-          className="group relative overflow-hidden rounded-[24px] border border-amber-100 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-amber-300 hover:shadow-lg hover:shadow-amber-500/10 cursor-pointer"
+          className="group relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white p-6 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-md cursor-pointer"
         >
-          <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-amber-500 to-orange-500" />
-          <div className="flex items-center justify-between pl-2">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">คำขอจองรออนุมัติ</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/30 group-hover:scale-110 transition-transform">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 border border-amber-100/80 text-amber-600 transition-transform group-hover:scale-105">
               <BadgeCheck className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4 pl-2">
+          <div className="mt-4">
             <div className="flex items-baseline gap-1.5">
-              <p className="text-3xl font-black tracking-tight text-amber-600">{summary.pending_bookings ?? 0}</p>
+              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.pending_bookings ?? 0}</p>
               <span className="text-sm font-semibold text-slate-400">รายการ</span>
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
-              <Clock className="h-3.5 w-3.5" />
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+              <Clock className="h-3.5 w-3.5 text-amber-500" />
               <span>รอการตรวจสอบจากแอดมิน</span>
             </div>
           </div>
@@ -726,22 +810,21 @@ export const Dashboard: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate('/sellers')}
-          className="group relative overflow-hidden rounded-[24px] border border-sky-100 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-sky-300 hover:shadow-lg hover:shadow-sky-500/10 cursor-pointer"
+          className="group relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white p-6 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md cursor-pointer"
         >
-          <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-sky-500 to-blue-600" />
-          <div className="flex items-center justify-between pl-2">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">ข้อมูลผู้ค้า</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/30 group-hover:scale-110 transition-transform">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 border border-slate-200/60 text-slate-700 transition-transform group-hover:scale-105">
               <Users className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4 pl-2">
+          <div className="mt-4">
             <div className="flex items-baseline gap-1.5">
-              <p className="text-3xl font-black tracking-tight text-sky-600">{summary.total_sellers ?? 0}</p>
+              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.total_sellers ?? 0}</p>
               <span className="text-sm font-semibold text-slate-400">ราย</span>
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-sky-600">
-              <Users className="h-3.5 w-3.5" />
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+              <Users className="h-3.5 w-3.5 text-slate-400" />
               <span>ผู้ค้าในระบบที่อนุมัติแล้ว</span>
             </div>
           </div>
@@ -752,22 +835,21 @@ export const Dashboard: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate('/sellers')}
-          className="group relative overflow-hidden rounded-[24px] border border-purple-100 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-purple-300 hover:shadow-lg hover:shadow-purple-500/10 cursor-pointer"
+          className="group relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white p-6 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md cursor-pointer"
         >
-          <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-purple-500 to-indigo-600" />
-          <div className="flex items-center justify-between pl-2">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">รายการรออนุมัติผู้สมัครใหม่</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-md shadow-purple-500/30 group-hover:scale-110 transition-transform">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 border border-indigo-100/80 text-indigo-600 transition-transform group-hover:scale-105">
               <UserRound className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4 pl-2">
+          <div className="mt-4">
             <div className="flex items-baseline gap-1.5">
-              <p className="text-3xl font-black tracking-tight text-purple-600">{summary.pending_sellers ?? 0}</p>
+              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.pending_sellers ?? 0}</p>
               <span className="text-sm font-semibold text-slate-400">รายการ</span>
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-purple-600">
-              <Clock className="h-3.5 w-3.5" />
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+              <Clock className="h-3.5 w-3.5 text-indigo-400" />
               <span>รอการตรวจสอบเอกสาร</span>
             </div>
           </div>
@@ -778,22 +860,21 @@ export const Dashboard: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate('/stores')}
-          className="group relative overflow-hidden rounded-[24px] border border-blue-100 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/10 cursor-pointer"
+          className="group relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white p-6 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md cursor-pointer"
         >
-          <div className="absolute left-0 top-0 h-full w-1.5 rounded-r-full bg-gradient-to-b from-blue-600 to-indigo-600" />
-          <div className="flex items-center justify-between pl-2">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">จำนวนแผงค้าในตลาดทั้งหมด</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/30 group-hover:scale-110 transition-transform">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 border border-blue-100/80 text-blue-600 transition-transform group-hover:scale-105">
               <Store className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4 pl-2">
+          <div className="mt-4">
             <div className="flex items-baseline gap-1.5">
               <p className="text-3xl font-black tracking-tight text-slate-900">{summary.total_stalls ?? 0}</p>
               <span className="text-sm font-semibold text-slate-400">แผง</span>
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600">
-              <Building2 className="h-3.5 w-3.5" />
+            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+              <Building2 className="h-3.5 w-3.5 text-blue-500" />
               <span>
                 จองแล้ว {summary.occupied_stalls ?? 0} แผง / ว่าง {summary.available_stalls ?? ((summary.total_stalls ?? 0) - (summary.occupied_stalls ?? 0))} แผง
               </span>
@@ -806,18 +887,18 @@ export const Dashboard: React.FC = () => {
       <section className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-sky-500" /> ทางลัดการจัดการข้อมูล (Admin Quick Actions)
+            <Sparkles className="h-4 w-4 text-blue-600" /> ทางลัดการจัดการข้อมูล (Admin Quick Actions)
           </h3>
           <span className="text-xs text-slate-400 font-medium">คลิกเพื่อไปยังหน้านั้นๆ ทันที</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
-            { label: 'อนุมัติการจองแผง', icon: BadgeCheck, href: '/verifications', color: 'from-amber-500 to-orange-500', badge: summary.pending_bookings },
-            { label: 'ตรวจสอบการชำระเงิน', icon: CreditCard, href: '/payments', color: 'from-emerald-500 to-teal-500' },
-            { label: 'แผนผังแผงค้าตลาด', icon: Map, href: '/stores', color: 'from-blue-600 to-indigo-600' },
-            { label: 'จัดการข้อมูลผู้ค้า', icon: Users, href: '/sellers', color: 'from-sky-500 to-blue-600' },
-            { label: 'สร้างประกาศข่าวสาร', icon: Megaphone, href: '/announcements', color: 'from-purple-500 to-pink-500' },
+            { label: 'อนุมัติการจองแผง', icon: BadgeCheck, href: '/verifications', badge: summary.pending_bookings },
+            { label: 'ตรวจสอบการชำระเงิน', icon: CreditCard, href: '/payments' },
+            { label: 'แผนผังแผงค้าตลาด', icon: Map, href: '/stores' },
+            { label: 'จัดการข้อมูลผู้ค้า', icon: Users, href: '/sellers' },
+            { label: 'สร้างประกาศข่าวสาร', icon: Megaphone, href: '/announcements' },
           ].map((action) => {
             const IconComp = action.icon;
             return (
@@ -825,19 +906,19 @@ export const Dashboard: React.FC = () => {
                 key={action.label}
                 type="button"
                 onClick={() => navigate(action.href)}
-                className="group flex flex-col items-center justify-center rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 text-center transition-all duration-200 hover:border-blue-300 hover:bg-white hover:shadow-md active:scale-95"
+                className="group flex flex-col items-center justify-center rounded-2xl border border-slate-200/80 bg-white p-4 text-center transition-all duration-200 hover:border-blue-300 hover:bg-blue-50/20 hover:shadow-xs active:scale-98 cursor-pointer"
               >
-                <div className="relative mb-2">
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${action.color} text-white shadow-md transition-transform group-hover:scale-110`}>
+                <div className="relative mb-2.5">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/80 transition-all duration-200 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 group-hover:scale-105 group-hover:shadow-md group-hover:shadow-blue-500/20">
                     <IconComp className="h-6 w-6" />
                   </div>
                   {action.badge ? (
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-sm ring-2 ring-white">
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-xs ring-2 ring-white">
                       {action.badge}
                     </span>
                   ) : null}
                 </div>
-                <span className="text-xs font-bold text-slate-800 transition group-hover:text-blue-600">{action.label}</span>
+                <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-blue-600">{action.label}</span>
               </button>
             );
           })}
@@ -852,7 +933,7 @@ export const Dashboard: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-extrabold text-slate-900">ความหนาแน่นโซนตลาด</h3>
-                  <span className="rounded-full bg-blue-100/80 px-2.5 py-0.5 text-xs font-extrabold text-blue-800 border border-blue-200">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
                     {zones.length} โซน
                   </span>
                 </div>
@@ -874,37 +955,31 @@ export const Dashboard: React.FC = () => {
               zones.map((zone) => {
                 const total = zone.total_stalls || 1;
                 const occupiedPct = Math.round((zone.occupied_count / total) * 100);
-                const zoneLetter = zone.zone_name.replace(/[^A-Za-z0-9ก-๙]/g, '').charAt(3) || 'Z';
                 return (
                   <div
                     key={zone.zone_id}
                     onClick={() => navigate('/stores')}
-                    className="group cursor-pointer rounded-2xl border border-slate-200/90 bg-gradient-to-b from-slate-50/90 to-white p-3.5 shadow-2xs transition-all duration-200 hover:border-blue-300 hover:shadow-md"
+                    className="group cursor-pointer rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3.5 shadow-2xs transition-all duration-200 hover:border-blue-300 hover:bg-white hover:shadow-md"
                   >
                     {/* Zone Header */}
                     <div className="flex items-center justify-between mb-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 font-extrabold text-xs text-white shadow-xs">
-                          {zoneLetter}
-                        </span>
-                        <span className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition">
-                          {zone.zone_name}
-                        </span>
-                      </div>
-                      <span className="rounded-lg bg-slate-100 px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
+                      <span className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition">
+                        {zone.zone_name}
+                      </span>
+                      <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
                         ทั้งหมด {total} แผง
                       </span>
                     </div>
 
                     {/* Stats Grid: จองแล้ว vs ว่าง */}
                     <div className="grid grid-cols-2 gap-2 mb-2.5">
-                      <div className="rounded-xl bg-blue-50/90 p-2 border border-blue-100 flex items-center justify-between">
-                        <span className="text-xs font-bold text-blue-900">จองแล้ว:</span>
-                        <span className="font-black text-sm text-blue-700">{zone.occupied_count} แผง</span>
+                      <div className="rounded-xl bg-slate-100/80 p-2 border border-slate-200/60 flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-600">จองแล้ว:</span>
+                        <span className="font-extrabold text-sm text-blue-600">{zone.occupied_count} แผง</span>
                       </div>
-                      <div className="rounded-xl bg-emerald-50/90 p-2 border border-emerald-100 flex items-center justify-between">
-                        <span className="text-xs font-bold text-emerald-900">ว่าง:</span>
-                        <span className="font-black text-sm text-emerald-700">{zone.available_count} แผง</span>
+                      <div className="rounded-xl bg-slate-100/80 p-2 border border-slate-200/60 flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-600">ว่าง:</span>
+                        <span className="font-extrabold text-sm text-emerald-600">{zone.available_count} แผง</span>
                       </div>
                     </div>
 
@@ -912,11 +987,11 @@ export const Dashboard: React.FC = () => {
                     <div className="space-y-1">
                       <div className="flex justify-between text-[11px] font-bold text-slate-600">
                         <span>อัตราการครองแผงโซนนี้</span>
-                        <span className="font-black text-blue-600">{occupiedPct}%</span>
+                        <span className="font-black text-slate-900">{occupiedPct}%</span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-slate-200 flex">
                         <div
-                          className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-500 rounded-full"
+                          className="h-full bg-blue-600 transition-all duration-500 rounded-full"
                           style={{ width: `${occupiedPct}%` }}
                         />
                       </div>
@@ -942,7 +1017,7 @@ export const Dashboard: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-extrabold text-slate-900">สัดส่วนประเภทสินค้า</h3>
-                  <span className="rounded-full bg-indigo-100/80 px-2.5 py-0.5 text-xs font-extrabold text-indigo-800 border border-indigo-200">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
                     {categories.length} หมวดหมู่
                   </span>
                 </div>
@@ -993,7 +1068,7 @@ export const Dashboard: React.FC = () => {
                 const count = category.count ?? category.value ?? 0;
                 const percentage = category.percentage ?? 0;
                 return (
-                  <div key={`${category.id ?? 'cat'}-${category.name}`} className="group rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 transition-colors hover:bg-blue-50/30">
+                  <div key={`${category.id ?? 'cat'}-${category.name}`} className="group rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 transition-colors hover:bg-slate-100/70">
                     <div className="flex items-center justify-between text-xs">
                       <div className="min-w-0 pr-2">
                         <div className="flex items-center gap-2">
@@ -1002,23 +1077,33 @@ export const Dashboard: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-black text-blue-700 shadow-2xs border border-slate-200 shrink-0">
+                        <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-extrabold text-slate-700 shadow-2xs border border-slate-200 shrink-0">
                           {percentage}%
                         </span>
                         {category.id != null && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCategory(category.id)}
-                            disabled={deletingCategoryId === category.id}
-                            className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
-                            title="ลบหมวดหมู่"
-                          >
-                            {deletingCategoryId === category.id ? (
-                              <span className="text-[10px] font-semibold">กำลังลบ</span>
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </button>
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditCategory(category)}
+                              className="rounded-full p-1 text-slate-400 hover:bg-blue-100 hover:text-blue-700 transition"
+                              title="แก้ไขหมวดหมู่"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCategory(category.id!)}
+                              disabled={deletingCategoryId === category.id}
+                              className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
+                              title="ลบหมวดหมู่"
+                            >
+                              {deletingCategoryId === category.id ? (
+                                <span className="text-[10px] font-semibold">กำลังลบ</span>
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1056,10 +1141,10 @@ export const Dashboard: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-1.5">
-                    <Heart className="h-5 w-5 text-rose-500 fill-rose-500/20" />
+                    <Heart className="h-5 w-5 text-slate-600" />
                     <span>ความสนใจของผู้ใช้</span>
                   </h3>
-                  <span className="rounded-full bg-rose-100/80 px-2.5 py-0.5 text-xs font-extrabold text-rose-800 border border-rose-200">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
                     {userInterests.length} ตัวเลือก
                   </span>
                 </div>
@@ -1069,7 +1154,7 @@ export const Dashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsAddInterestOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-rose-700 transition active:scale-95 cursor-pointer"
+                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer"
               >
                 <Heart className="h-4 w-4" />
                 <span>เพิ่มตัวเลือก</span>
@@ -1083,7 +1168,7 @@ export const Dashboard: React.FC = () => {
                 placeholder="ค้นหาตัวเลือกความสนใจ..."
                 value={interestSearch}
                 onChange={(e) => setInterestSearch(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3.5 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-500 focus:border-rose-500 focus:bg-white focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3.5 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:bg-white focus:outline-none"
               />
               {interestSearch && (
                 <button
@@ -1107,7 +1192,7 @@ export const Dashboard: React.FC = () => {
           <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
             {filteredInterests.length > 0 ? (
               filteredInterests.map((interest, index) => (
-                <div key={`interest-${interest.name}`} className="group rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 transition-colors hover:bg-rose-50/30">
+                <div key={`interest-${interest.name}`} className="group rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 transition-colors hover:bg-slate-100/70">
                   <div className="flex items-center justify-between text-xs">
                     <div className="min-w-0 pr-2 flex items-center gap-2">
                       {index === 0 && <span className="text-sm shrink-0">🔥</span>}
@@ -1115,23 +1200,33 @@ export const Dashboard: React.FC = () => {
                       <span className="text-xs font-bold text-slate-600 shrink-0">({interest.count} คนเลือก)</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-black text-rose-600 shadow-2xs border border-slate-200 shrink-0">
+                      <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-extrabold text-slate-700 shadow-2xs border border-slate-200 shrink-0">
                         {interest.percentage}%
                       </span>
                       {interest.id != null && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteInterest(interest.id)}
-                          disabled={deletingInterestId === interest.id}
-                          className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
-                          title="ลบตัวเลือกความสนใจ"
-                        >
-                          {deletingInterestId === interest.id ? (
-                            <span className="text-[10px] font-semibold">กำลังลบ</span>
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </button>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditInterest(interest)}
+                            className="rounded-full p-1 text-slate-400 hover:bg-blue-100 hover:text-blue-700 transition"
+                            title="แก้ไขตัวเลือกความสนใจ"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteInterest(interest.id!)}
+                            disabled={deletingInterestId === interest.id}
+                            className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
+                            title="ลบตัวเลือกความสนใจ"
+                          >
+                            {deletingInterestId === interest.id ? (
+                              <span className="text-[10px] font-semibold">กำลังลบ</span>
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1153,7 +1248,7 @@ export const Dashboard: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsViewAllInterestsOpen(true)}
-              className="flex items-center gap-0.5 font-extrabold text-rose-600 hover:text-rose-700 transition cursor-pointer"
+              className="flex items-center gap-0.5 font-extrabold text-blue-600 hover:text-blue-700 transition cursor-pointer"
             >
               <span>ดูทั้งหมด ({userInterests.length})</span>
               <ChevronRight className="h-4 w-4" />
@@ -1252,8 +1347,8 @@ export const Dashboard: React.FC = () => {
             <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
-                    <Heart className="h-5 w-5 fill-rose-600/20" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                    <Heart className="h-5 w-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900">เพิ่มตัวเลือกความสนใจของผู้ใช้</h3>
@@ -1280,7 +1375,7 @@ export const Dashboard: React.FC = () => {
                     placeholder="เช่น แฟชั่น & ความงาม, อุปกรณ์อิเล็กทรอนิกส์, สินค้ามือสอง"
                     value={interestName}
                     onChange={(e) => setInterestName(e.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>
 
@@ -1295,7 +1390,7 @@ export const Dashboard: React.FC = () => {
                   <button
                     type="submit"
                     disabled={isSubmittingInterest || !interestName.trim()}
-                    className="flex items-center gap-2 rounded-2xl bg-rose-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-rose-600/30 hover:bg-rose-700 transition disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-600/30 hover:bg-blue-700 transition disabled:opacity-50"
                   >
                     {isSubmittingInterest ? (
                       <span>กำลังบันทึก...</span>
@@ -1374,19 +1469,29 @@ export const Dashboard: React.FC = () => {
                               {category.percentage}%
                             </span>
                             {category.id != null && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteCategory(category.id)}
-                                disabled={deletingCategoryId === category.id}
-                                className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
-                                title="ลบหมวดหมู่"
-                              >
-                                {deletingCategoryId === category.id ? (
-                                  <span className="text-[10px] font-semibold">กำลังลบ</span>
-                                ) : (
-                                  <Trash2 className="h-4 w-4" />
-                                )}
-                              </button>
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditCategory(category)}
+                                  className="rounded-full p-1 text-slate-400 hover:bg-blue-100 hover:text-blue-700 transition"
+                                  title="แก้ไขหมวดหมู่"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCategory(category.id!)}
+                                  disabled={deletingCategoryId === category.id}
+                                  className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
+                                  title="ลบหมวดหมู่"
+                                >
+                                  {deletingCategoryId === category.id ? (
+                                    <span className="text-[10px] font-semibold">กำลังลบ</span>
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                </button>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -1427,8 +1532,8 @@ export const Dashboard: React.FC = () => {
             <div className="w-full max-w-3xl max-h-[85vh] rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl flex flex-col justify-between space-y-4 animate-in zoom-in-95 duration-200 overflow-hidden">
               <div className="flex items-center justify-between border-b border-slate-100 pb-4 shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
-                    <Heart className="h-6 w-6 fill-rose-600/20" />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                    <Heart className="h-6 w-6" />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-900">ตัวเลือกความสนใจทั้งหมด ({userInterests.length})</h3>
@@ -1443,7 +1548,7 @@ export const Dashboard: React.FC = () => {
                       setIsViewAllInterestsOpen(false);
                       setIsAddInterestOpen(true);
                     }}
-                    className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700 transition"
+                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition"
                   >
                     <Heart className="h-4 w-4" />
                     <span>เพิ่มตัวเลือกใหม่</span>
@@ -1465,7 +1570,7 @@ export const Dashboard: React.FC = () => {
                   placeholder="ค้นหาตัวเลือกความสนใจ..."
                   value={interestSearch}
                   onChange={(e) => setInterestSearch(e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/70 pl-10 pr-4 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:bg-white focus:outline-none"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/70 pl-10 pr-4 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
                 />
               </div>
 
@@ -1480,23 +1585,33 @@ export const Dashboard: React.FC = () => {
                             <span className="font-bold text-sm text-slate-800">{interest.name}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="rounded-lg bg-white px-2 py-1 text-xs font-extrabold text-rose-600 shadow-2xs border border-slate-200/60">
+                            <span className="rounded-lg bg-white px-2 py-1 text-xs font-extrabold text-slate-700 shadow-2xs border border-slate-200/60">
                               {interest.percentage}%
                             </span>
                             {interest.id != null && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteInterest(interest.id)}
-                                disabled={deletingInterestId === interest.id}
-                                className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
-                                title="ลบตัวเลือกความสนใจ"
-                              >
-                                {deletingInterestId === interest.id ? (
-                                  <span className="text-[10px] font-semibold">กำลังลบ</span>
-                                ) : (
-                                  <Trash2 className="h-4 w-4" />
-                                )}
-                              </button>
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditInterest(interest)}
+                                  className="rounded-full p-1 text-slate-400 hover:bg-blue-100 hover:text-blue-700 transition"
+                                  title="แก้ไขตัวเลือกความสนใจ"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteInterest(interest.id!)}
+                                  disabled={deletingInterestId === interest.id}
+                                  className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
+                                  title="ลบตัวเลือกความสนใจ"
+                                >
+                                  {deletingInterestId === interest.id ? (
+                                    <span className="text-[10px] font-semibold">กำลังลบ</span>
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                </button>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -1525,6 +1640,155 @@ export const Dashboard: React.FC = () => {
                   ปิดหน้าต่าง
                 </button>
               </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ── Edit Category Modal Portal ── */}
+      {isEditCategoryOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-600">
+                    <Pencil className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">แก้ไขหมวดหมู่สินค้า</h3>
+                    <p className="text-xs text-slate-400">แก้ไขชื่อและคำอธิบายหมวดหมู่สินค้าในระบบ</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditCategoryOpen(false)}
+                  className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateCategory} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    ชื่อหมวดหมู่สินค้า <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="เช่น กิฟต์ช็อป, งานแฮนด์เมด, ผักผลไม้สด"
+                    value={editingCategoryName}
+                    onChange={(e) => setEditingCategoryName(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    คำอธิบายหมวดหมู่ (ระบุหรือไม่ก็ได้)
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="อธิบายสินค้าในหมวดหมู่นี้สั้นๆ..."
+                    value={editingCategoryDesc}
+                    onChange={(e) => setEditingCategoryDesc(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditCategoryOpen(false)}
+                    className="rounded-2xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingEditCategory || !editingCategoryName.trim()}
+                    className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-600/30 hover:bg-blue-700 transition disabled:opacity-50"
+                  >
+                    {isSubmittingEditCategory ? (
+                      <span>กำลังบันทึก...</span>
+                    ) : (
+                      <>
+                        <Pencil className="h-4 w-4" />
+                        <span>บันทึกการแก้ไข</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ── Edit User Interest Modal Portal ── */}
+      {isEditInterestOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                    <Pencil className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">แก้ไขตัวเลือกความสนใจ</h3>
+                    <p className="text-xs text-slate-400">แก้ไขชื่อหมวดหมู่ความสนใจสำหรับผู้ใช้</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditInterestOpen(false)}
+                  className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateInterest} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    ชื่อหมวดหมู่ความสนใจ <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="เช่น แฟชั่น & ความงาม, อุปกรณ์อิเล็กทรอนิกส์, สินค้ามือสอง"
+                    value={editingInterestName}
+                    onChange={(e) => setEditingInterestName(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditInterestOpen(false)}
+                    className="rounded-2xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingEditInterest || !editingInterestName.trim()}
+                    className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-600/30 hover:bg-blue-700 transition disabled:opacity-50"
+                  >
+                    {isSubmittingEditInterest ? (
+                      <span>กำลังบันทึก...</span>
+                    ) : (
+                      <>
+                        <Pencil className="h-4 w-4" />
+                        <span>บันทึกการแก้ไข</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>,
           document.body

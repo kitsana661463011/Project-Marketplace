@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle, AlertCircle, Clock, Info } from 'lucide-react';
 import type { Review } from '../../types';
 import { formatImageUrl } from '../../utils/imageUtils';
+import { formatThaiDate } from '../../utils/dateUtils';
 
 interface RecentReviewsProps {
   reviews: Review[];
@@ -44,7 +45,7 @@ const formatTime = (date: Date): string => {
   if (diffHours < 24) return `${diffHours} ชั่วโมงที่แล้ว`;
   if (diffDays < 7) return `${diffDays} วันที่แล้ว`;
 
-  return date.toLocaleDateString('th-TH');
+  return formatThaiDate(date);
 };
 
 export const RecentReviews: React.FC<RecentReviewsProps> = ({

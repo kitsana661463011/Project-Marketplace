@@ -27,7 +27,7 @@ const pageTitleMap: Record<string, string> = {
   '/stores': 'จัดการแผนผังตลาด',
   '/sellers': 'ข้อมูลผู้ค้า',
   '/verifications': 'รายการจอง',
-  '/payments': 'การชำระเงิน',
+  '/payments': 'ระบบการเงิน',
   '/reports': 'แจ้งเหตุ/ปัญหา',
   '/announcements': 'จัดการประกาศ',
 };
@@ -95,7 +95,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/stores" element={renderWithShell('จัดการแผนผังตลาด', <Suspense fallback={<LoadingFallback />}><MarketMapPage /></Suspense>)} />
       <Route path="/sellers" element={renderWithShell('ข้อมูลผู้ค้า', <Suspense fallback={<LoadingFallback />}><SellersPage /></Suspense>)} />
       <Route path="/verifications" element={renderWithShell('รายการจอง', <Suspense fallback={<LoadingFallback />}><VerificationRequestsPage /></Suspense>)} />
-      <Route path="/payments" element={renderWithShell('การชำระเงิน', <Suspense fallback={<LoadingFallback />}><PaymentManagementPage /></Suspense>)} />
+      <Route path="/payments" element={renderWithShell('ระบบการเงิน', <Suspense fallback={<LoadingFallback />}><PaymentManagementPage /></Suspense>)} />
       <Route path="/reports" element={renderWithShell('แจ้งเหตุ/ปัญหา', <Suspense fallback={<LoadingFallback />}><ReportsPage /></Suspense>)} />
       <Route path="/announcements" element={renderWithShell('จัดการประกาศ', <Suspense fallback={<LoadingFallback />}><AnnouncementsPage /></Suspense>)} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

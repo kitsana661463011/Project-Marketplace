@@ -57,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     stores: 'แผนผังตลาด',
     sellers: 'ข้อมูลผู้ค้า',
     verifications: 'รายการจอง',
-    payments: 'การชำระเงิน',
+    payments: 'ระบบการเงิน',
     reports: 'แจ้งเหตุ/ปัญหา',
     announcements: 'ประกาศ',
   };
@@ -98,18 +98,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onNavigate(item.id);
                 setIsMobileOpen(false);
               }}
-              className={`group relative flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.98] ${
-                isActive || activeItemId === item.id
+              className={`group relative flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.98] ${isActive || activeItemId === item.id
                   ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/30 scale-[1.01]'
                   : 'text-slate-600 hover:translate-x-1 hover:bg-blue-50/80 hover:text-blue-700'
-              }`}
+                }`}
               aria-label={displayLabel}
             >
-              <span className={`relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
-                isActive || activeItemId === item.id
+              <span className={`relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${isActive || activeItemId === item.id
                   ? 'bg-white/20'
                   : 'bg-slate-100/80 group-hover:scale-110 group-hover:bg-blue-100 group-hover:text-blue-600'
-              }`}>
+                }`}>
                 <Icon className="h-[18px] w-[18px] transition-transform duration-200 group-hover:rotate-6" />
                 {/* Badge on icon */}
                 {hasBadge && !(isActive || activeItemId === item.id) && (

@@ -46,7 +46,7 @@ export const mockNavItems: NavItem[] = [
   },
   {
     id: 'payments',
-    label: 'การชำระเงิน',
+    label: 'ระบบการเงิน',
     icon: 'CreditCard',
     href: '/payments',
   },

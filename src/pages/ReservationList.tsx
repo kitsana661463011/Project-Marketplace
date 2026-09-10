@@ -3,29 +3,39 @@ import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Bold,
-  Building2,
   CalendarDays,
   Camera,
   CheckCircle2,
-  CheckCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  Eye,
+  EyeOff,
   FileText,
   ImageOff,
   Inbox,
   Italic,
   Link,
   List,
+  Maximize2,
+  MessageSquare,
   Plus,
   Receipt,
+  Save,
   Search,
+  ShieldCheck,
+  Star,
+  Store,
+  User,
   Wrench,
+  X,
   XCircle,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Announcement, IssueReport } from '../types';
 import { ActionButton } from '../components/common';
+import { formatThaiDate, formatThaiDateTime } from '../utils/dateUtils';
 
 type ReservationStatus = 'pending' | 'approved' | 'rejected' | 'refund_requested' | 'refunded';
 
@@ -119,18 +129,7 @@ const toReservationStatus = (value?: string | null): ReservationStatus => {
 };
 
 const formatBookingDate = (value?: string | null) => {
-  if (!value) return '-';
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleDateString('th-TH', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatThaiDate(value);
 };
 
 const getInitials = (name?: string | null) => {
@@ -171,7 +170,7 @@ const mapBookingApiItem = (item: BookingApiItem): ReservationItem => {
     refundAccountNumber: item.refund_account_number || undefined,
     refundAccountName: item.refund_account_name || undefined,
     refundSlip: formatImageUrl(item.refund_slip),
-    refundedAt: item.refunded_at ? formatBookingDate(item.refunded_at) : undefined,
+    refundedAt: item.refunded_at ? formatThaiDateTime(item.refunded_at) : undefined,
     rentalType: mappedRentalType,
     dailyPrice: Number(item.daily_price ?? item.stall_daily_price ?? 0),
     monthlyPrice: Number(item.monthly_price ?? item.stall_monthly_price ?? 0),
@@ -221,20 +220,7 @@ const SimplePageCard: React.FC<{ title: string; description: string }> = ({ titl
 );
 
 const formatAnnouncementDate = (value?: string | null) => {
-  if (!value) return '—';
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleString('th-TH', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatThaiDateTime(value, '—');
 };
 
 export const ReservationListPage: React.FC = () => {
@@ -1472,6 +1458,9 @@ export const ReportsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [adminNote, setAdminNote] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [modalStatus, setModalStatus] = useState<IssueReport['status']>('pending');
+  const [modalSuccessMsg, setModalSuccessMsg] = useState('');
+  const [isImageFullscreen, setIsImageFullscreen] = useState(false);
 
   const categoryOptions = [
     { label: 'ทั้งหมด', value: 'all' },
@@ -1500,18 +1489,20 @@ export const ReportsPage: React.FC = () => {
       const items = Array.isArray(payload?.data) ? payload.data : [];
       setReports(
         items.map((item: any) => ({
-          id: String(item.problem_id),
+          id: String(item.id || item.problem_id),
           type: item.report_type || 'other',
           zone: item.stall_number || '-',
           description: item.description || '-',
-          date: item.report_date ? new Date(item.report_date).toLocaleDateString('th-TH') : '-',
-          time: item.report_date ? new Date(item.report_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '-',
+          date: formatThaiDate(item.report_date),
+          time: item.report_date ? `${new Date(item.report_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false })} น.` : '-',
           rawDate: item.report_date || null,
           status: item.status || 'pending',
           image: formatImageUrl(item.image),
           priority: 'medium',
           reporter: item.user_name || 'ไม่ระบุ',
           adminNote: item.admin_note || '',
+          isReviewReport: Boolean(item.is_review_report),
+          reviewDetails: item.review_details || undefined,
         }))
       );
     } catch {
@@ -1535,6 +1526,8 @@ export const ReportsPage: React.FC = () => {
   useEffect(() => {
     if (selectedReport) {
       setAdminNote(selectedReport.adminNote || '');
+      setModalStatus(selectedReport.status || 'pending');
+      setModalSuccessMsg('');
     }
   }, [selectedReport]);
 
@@ -1605,25 +1598,85 @@ export const ReportsPage: React.FC = () => {
     }
   };
 
-  const updateStatus = async (id: string, status: IssueReport['status']) => {
+
+
+
+
+  const handleToggleReviewStatus = async (reportId: number) => {
     try {
       setUpdating(true);
-      const response = await fetch(`/api/v1/admin/problem-reports/${id}`, {
+      const res = await fetch(`/api/v1/admin/review-reports/${reportId}/toggle-review`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      const data = await res.json();
+      if (data.status) {
+        const newStatus = data.data?.review_status || 'show';
+        setSelectedReport((prev) => {
+          if (!prev || !prev.reviewDetails) return prev;
+          return {
+            ...prev,
+            reviewDetails: {
+              ...prev.reviewDetails,
+              review_status: newStatus,
+            },
+          };
+        });
+        setReports((prev) =>
+          prev.map((r) => {
+            if (r.reviewDetails && r.reviewDetails.report_id === reportId) {
+              return {
+                ...r,
+                reviewDetails: {
+                  ...r.reviewDetails,
+                  review_status: newStatus,
+                },
+              };
+            }
+            return r;
+          })
+        );
+        setModalSuccessMsg(newStatus === 'hidden' ? 'ซ่อนความคิดเห็นจากหน้าร้านค้าเรียบร้อยแล้ว' : 'เปิดแสดงความคิดเห็นตามปกติแล้ว');
+        setTimeout(() => setModalSuccessMsg(''), 4000);
+      }
+    } catch {
+      alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะความคิดเห็น');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleSaveReport = async (overrideStatus?: IssueReport['status']) => {
+    if (!selectedReport) return;
+    const targetStatus = overrideStatus || modalStatus;
+    try {
+      setUpdating(true);
+      const response = await fetch(`/api/v1/admin/problem-reports/${selectedReport.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ status, admin_note: adminNote }),
+        body: JSON.stringify({ status: targetStatus, admin_note: adminNote }),
       });
 
       if (!response.ok) {
         throw new Error('อัปเดตสถานะไม่สำเร็จ');
       }
 
-      setReports((current) => current.map((item) => (item.id === id ? { ...item, status, adminNote } : item)));
-      setSelectedReport((current) => (current && current.id === id ? { ...current, status, adminNote } : current));
-      setError(null);
+      setReports((current) =>
+        current.map((item) =>
+          item.id === selectedReport.id ? { ...item, status: targetStatus, adminNote } : item
+        )
+      );
+      setSelectedReport((current) =>
+        current && current.id === selectedReport.id
+          ? { ...current, status: targetStatus, adminNote }
+          : current
+      );
+      setModalStatus(targetStatus);
+      setModalSuccessMsg('บันทึกข้อมูลและอัปเดตสถานะเรียบร้อยแล้ว');
+      setTimeout(() => setModalSuccessMsg(''), 4000);
       window.dispatchEvent(new Event('refresh-badges'));
     } catch {
-      setError('อัปเดตสถานะไม่สำเร็จ กรุณาลองใหม่');
+      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง');
     } finally {
       setUpdating(false);
     }
@@ -1834,99 +1887,413 @@ export const ReportsPage: React.FC = () => {
         </div>
       </div>
 
-      {selectedReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-          <div className="w-full max-w-5xl rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between rounded-t-3xl bg-sky-700 px-6 py-4 text-white">
-              <div>
-                <h3 className="text-xl font-semibold">รายละเอียดการแจ้งซ่อม</h3>
-                <p className="mt-1 text-sm text-sky-100">ตรวจสอบข้อมูลและอัปเดตสถานะคำร้อง</p>
+      {selectedReport && (() => {
+        const isResolved = selectedReport.status === 'resolved';
+        return createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="w-full max-w-5xl max-h-[92vh] flex flex-col rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4.5 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100">
+                    {selectedReport.reviewDetails ? (
+                      <MessageSquare className="h-5 w-5" />
+                    ) : (
+                      <Wrench className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h3 className="text-lg font-extrabold text-slate-900">
+                      {selectedReport.reviewDetails ? 'รายละเอียดรายงานความคิดเห็น' : 'รายละเอียดการแจ้งซ่อม / ปัญหา'}
+                    </h3>
+                    <span className="rounded-lg bg-slate-100 px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
+                      {selectedReport.reviewDetails ? `#RR-${selectedReport.reviewDetails.report_id}` : `#PR-${selectedReport.id}`}
+                    </span>
+                    <span className={`rounded-full border px-3 py-0.5 text-xs font-extrabold ${getStatusMeta(selectedReport.status).className}`}>
+                      {getStatusMeta(selectedReport.status).label}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReport(null)}
+                  className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <button onClick={() => setSelectedReport(null)} className="rounded-full p-2 transition hover:bg-sky-800">
-                <XCircle className="h-5 w-5" />
-              </button>
+
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto p-6 grid gap-6 lg:grid-cols-12 custom-scrollbar">
+                {/* Left Column (5 cols) */}
+                <div className="lg:col-span-5 space-y-4">
+                  {selectedReport.reviewDetails ? (
+                    <>
+                      {/* Review Details Card */}
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                          <span className="text-xs font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                            <MessageSquare className="h-4 w-4 text-blue-600" />
+                            <span>ข้อความรีวิวที่ถูกรายงาน</span>
+                          </span>
+                          <span
+                            className={`rounded-full border px-2.5 py-0.5 text-xs font-extrabold ${
+                              selectedReport.reviewDetails.review_status === 'hidden'
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}
+                          >
+                            {selectedReport.reviewDetails.review_status === 'hidden' ? 'ซ่อนจากหน้าร้านแล้ว' : 'แสดงบนหน้าร้านปกติ'}
+                          </span>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2 text-slate-700">
+                              <Store className="h-4 w-4 text-slate-400 shrink-0" />
+                              <span className="font-semibold text-slate-500">ร้านค้า:</span>
+                              <span className="font-extrabold text-blue-600">{selectedReport.reviewDetails.shop_name}</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-amber-500">
+                              {Array.from({ length: 5 }, (_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`h-3.5 w-3.5 ${
+                                    i < Math.round(selectedReport.reviewDetails!.rating)
+                                      ? 'fill-amber-400 text-amber-400'
+                                      : 'text-slate-200'
+                                  }`}
+                                />
+                              ))}
+                              <span className="text-xs font-bold text-slate-600 ml-1">{selectedReport.reviewDetails.rating}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-sm text-slate-700">
+                            <User className="h-4 w-4 text-slate-400 shrink-0" />
+                            <span className="font-semibold text-slate-500">ผู้เขียนรีวิว:</span>
+                            <span className="font-bold text-slate-900">{selectedReport.reviewDetails.reviewer_name}</span>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-3.5 space-y-1.5">
+                            <span className="text-xs font-bold text-slate-500">เนื้อหาความคิดเห็น:</span>
+                            <p className="text-sm font-semibold text-slate-900 leading-relaxed italic">
+                              "{selectedReport.reviewDetails.comment || 'ไม่มีข้อความ'}"
+                            </p>
+                          </div>
+
+                          {/* Action to Hide / Show Review */}
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleReviewStatus(selectedReport.reviewDetails!.report_id)}
+                              disabled={updating}
+                              className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-extrabold transition cursor-pointer active:scale-98 disabled:opacity-50 ${
+                                selectedReport.reviewDetails.review_status === 'hidden'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
+                                  : 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100'
+                              }`}
+                            >
+                              {selectedReport.reviewDetails.review_status === 'hidden' ? (
+                                <>
+                                  <Eye className="h-4 w-4 text-emerald-600" />
+                                  <span>ยกเลิกการซ่อน (แสดงความคิดเห็นบนหน้าร้านตามปกติ)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <EyeOff className="h-4 w-4 text-rose-600" />
+                                  <span>ซ่อนความคิดเห็นนี้ (ไม่แสดงบนหน้าร้าน)</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Report Information Card */}
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3.5 shadow-xs">
+                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          <span className="text-xs font-black uppercase text-slate-700 tracking-wider">
+                            ข้อมูลการแจ้งรายงาน
+                          </span>
+                        </div>
+
+                        <div className="space-y-2.5 text-sm">
+                          <div className="flex items-center gap-2 text-slate-700">
+                            <User className="h-4 w-4 text-slate-400 shrink-0" />
+                            <span className="font-semibold text-slate-500">ผู้แจ้งรายงาน:</span>
+                            <span className="font-bold text-slate-900">{selectedReport.reviewDetails.reporter_name || selectedReport.reporter}</span>
+                          </div>
+
+                          {selectedReport.reviewDetails.reporter_phone && (
+                            <div className="flex items-center gap-2 text-slate-700">
+                              <span className="font-semibold text-slate-500 text-xs">เบอร์ติดต่อ:</span>
+                              <span className="font-bold text-slate-900 text-xs">{selectedReport.reviewDetails.reporter_phone}</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 text-slate-700">
+                            <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+                            <span className="font-semibold text-slate-500">วันเวลาที่รายงาน:</span>
+                            <span className="font-bold text-slate-900">{selectedReport.date} {selectedReport.time}</span>
+                          </div>
+
+                          <div className="border-t border-slate-100 pt-3">
+                            <div className="flex items-center gap-1.5 font-bold text-rose-700 mb-1.5 text-xs">
+                              <span>เหตุผลที่รายงานความคิดเห็น:</span>
+                            </div>
+                            <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-sm font-bold text-rose-900">
+                              {selectedReport.reviewDetails.report_reason}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-bold text-slate-900">
+                            รูปภาพแนบจากการแจ้งเหตุ
+                          </h4>
+                          {selectedReport.image && (
+                            <button
+                              type="button"
+                              onClick={() => setIsImageFullscreen(true)}
+                              className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 transition cursor-pointer"
+                            >
+                              <Maximize2 className="h-3.5 w-3.5" />
+                              <span>ดูภาพขยาย</span>
+                            </button>
+                          )}
+                        </div>
+                        {selectedReport.image ? (
+                          <div
+                            onClick={() => setIsImageFullscreen(true)}
+                            className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 cursor-pointer shadow-xs"
+                          >
+                            <img
+                              src={selectedReport.image}
+                              alt="ภาพแจ้งเหตุ"
+                              className="h-64 w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm shadow-md">
+                                <Maximize2 className="h-3.5 w-3.5" />
+                                <span>คลิกเพื่อดูภาพขนาดเต็ม</span>
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex h-48 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-slate-400 space-y-2">
+                            <ImageOff className="h-8 w-8 text-slate-300" />
+                            <span className="text-sm font-medium">ไม่มีรูปภาพแนบในคำร้องนี้</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Summary Details Card */}
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3.5 shadow-xs">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full border px-3 py-1 text-xs font-extrabold ${getTypeMeta(selectedReport.type).className}`}>
+                            {getTypeMeta(selectedReport.type).label}
+                          </span>
+                          <span className="flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-extrabold text-slate-800 border border-slate-200">
+                            <Store className="h-3.5 w-3.5 text-slate-600" />
+                            <span>แผง: {selectedReport.zone}</span>
+                          </span>
+                        </div>
+
+                        <div className="space-y-2.5 text-sm">
+                          <div className="flex items-center gap-2 text-slate-700">
+                            <User className="h-4 w-4 text-slate-400 shrink-0" />
+                            <span className="font-semibold text-slate-500">ผู้แจ้ง:</span>
+                            <span className="font-bold text-slate-900">{selectedReport.reporter || 'ไม่ระบุ'}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-slate-700">
+                            <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+                            <span className="font-semibold text-slate-500">วันเวลา:</span>
+                            <span className="font-bold text-slate-900">{selectedReport.date} {selectedReport.time}</span>
+                          </div>
+
+                          <div className="border-t border-slate-100 pt-3 text-slate-800">
+                            <div className="flex items-center gap-1.5 font-bold text-slate-900 mb-1.5 text-sm">
+                              <AlertTriangle className="h-4 w-4 text-amber-500" />
+                              <span>รายละเอียดปัญหาที่แจ้ง:</span>
+                            </div>
+                            <p className="leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 text-slate-900 text-sm font-medium">
+                              {selectedReport.description}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Right Column: Admin Management Section (7 cols) */}
+                <div className="lg:col-span-7 space-y-4">
+                  <div className="rounded-2xl border border-blue-200 bg-white p-5 sm:p-6 space-y-5 shadow-xs">
+                    {/* Section Header */}
+                    <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs">
+                        <ShieldCheck className="h-5 w-5" />
+                      </div>
+                      <h4 className="text-base font-extrabold text-slate-900">
+                        {selectedReport.reviewDetails ? 'การดำเนินการของแอดมิน (รายงานความคิดเห็น)' : 'การดำเนินการของแอดมิน'}
+                      </h4>
+                    </div>
+
+                    {/* Status Selection / Locking */}
+                    <div>
+                      <label className="block text-sm font-bold text-slate-800 mb-2.5">
+                        สถานะการดำเนินงาน <span className="text-rose-500">*</span>
+                      </label>
+
+                      {isResolved ? (
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 flex items-center gap-3.5">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shrink-0 shadow-xs">
+                            <CheckCircle2 className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-extrabold text-emerald-950">คำร้องนี้ดำเนินการเสร็จสิ้นแล้ว</p>
+                            <p className="text-xs font-semibold text-emerald-800 mt-0.5">สถานะได้รับการล็อกสมบูรณ์แล้ว ไม่สามารถเปลี่ยนกลับเป็นกำลังแก้ไขได้</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setModalStatus('pending')}
+                            disabled={selectedReport.status === 'progress'}
+                            className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border text-sm font-extrabold transition cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                              modalStatus === 'pending'
+                                ? 'border-amber-400 bg-amber-50 text-amber-900 ring-2 ring-amber-400/30 shadow-xs'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-amber-50/30 hover:border-amber-200'
+                            }`}
+                          >
+                            <Clock className={`h-4 w-4 ${modalStatus === 'pending' ? 'text-amber-600' : 'text-slate-400'}`} />
+                            <span>รอดำเนินการ</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setModalStatus('progress')}
+                            className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border text-sm font-extrabold transition cursor-pointer active:scale-95 ${
+                              modalStatus === 'progress'
+                                ? 'border-blue-500 bg-blue-50 text-blue-900 ring-2 ring-blue-500/30 shadow-xs'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-blue-50/30 hover:border-blue-200'
+                            }`}
+                          >
+                            <Wrench className={`h-4 w-4 ${modalStatus === 'progress' ? 'text-blue-600' : 'text-slate-400'}`} />
+                            <span>{selectedReport.reviewDetails ? 'กำลังตรวจสอบ' : 'กำลังแก้ไข'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setModalStatus('resolved')}
+                            className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl border text-sm font-extrabold transition cursor-pointer active:scale-95 ${
+                              modalStatus === 'resolved'
+                                ? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/30 shadow-xs'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-emerald-50/30 hover:border-emerald-200'
+                            }`}
+                          >
+                            <CheckCircle2 className={`h-4 w-4 ${modalStatus === 'resolved' ? 'text-emerald-600' : 'text-slate-400'}`} />
+                            <span>{selectedReport.reviewDetails ? 'ตรวจสอบเสร็จสิ้น' : 'แก้ไขเสร็จสิ้น'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Admin Note Input */}
+                    <div>
+                      <label className="block text-sm font-bold text-slate-800 mb-2">
+                        หมายเหตุแอดมิน
+                      </label>
+                      <textarea
+                        rows={6}
+                        value={adminNote}
+                        onChange={(event) => setAdminNote(event.target.value)}
+                        placeholder={
+                          selectedReport.reviewDetails
+                            ? 'พิมพ์ข้อความบันทึกการตรวจสอบความคิดเห็น หรือการดำเนินการเพิ่มเติม...'
+                            : 'พิมพ์ข้อความบันทึกการซ่อมแซมหรือรายละเอียดเพิ่มเติม...'
+                        }
+                        className="w-full rounded-2xl border border-slate-300 bg-white p-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+
+                    {/* Success Message Banner */}
+                    {modalSuccessMsg && (
+                      <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-800 animate-in fade-in duration-200">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span>{modalSuccessMsg}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-between border-t border-slate-100 bg-white px-6 py-4 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectedReport(null)}
+                  className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  ปิดหน้าต่าง
+                </button>
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveReport()}
+                    disabled={updating}
+                    className="flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-600/30 hover:bg-blue-700 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                  >
+                    {updating ? (
+                      <span>กำลังบันทึกข้อมูล...</span>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        <span>บันทึกการเปลี่ยนแปลง</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
+          </div>,
+          document.body
+        );
+      })()}
 
-            <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <div>
-                <h4 className="mb-3 text-base font-semibold text-slate-900">รูปแนบจากการแจ้งเหตุ</h4>
-                {selectedReport.image ? (
-                  <img src={selectedReport.image} alt="ภาพแจ้งเหตุ" className="h-80 w-full rounded-2xl object-cover" />
-                ) : (
-                  <div className="flex h-80 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-slate-400">
-                    ไม่มีรูปภาพที่แนบมา
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  <span className={`rounded-full border px-3 py-1 text-sm font-semibold ${getTypeMeta(selectedReport.type).className}`}>
-                    {getTypeMeta(selectedReport.type).label}
-                  </span>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
-                    {selectedReport.zone}
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center gap-2 text-sm text-slate-500">
-                    <Building2 className="h-4 w-4" />
-                    <span>ผู้แจ้ง</span>
-                  </div>
-                  <p className="mt-2 font-semibold text-slate-900">{selectedReport.reporter || 'ไม่ระบุ'}</p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
-                    <AlertTriangle className="h-4 w-4" />
-                    <span>รายละเอียด</span>
-                  </div>
-                  <p className="text-sm leading-6 text-slate-700">{selectedReport.description}</p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
-                    <CalendarDays className="h-4 w-4" />
-                    <span>วันที่และเวลา</span>
-                  </div>
-                  <p className="text-sm text-slate-700">{selectedReport.date} {selectedReport.time}</p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <label className="mb-2 block text-sm font-medium text-slate-700">หมายเหตุแอดมิน</label>
-                  <textarea
-                    rows={4}
-                    value={adminNote}
-                    onChange={(event) => setAdminNote(event.target.value)}
-                    placeholder="พิมพ์ข้อความเพิ่มเติมสำหรับลูกค้า/ช่างซ่อม..."
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-4 sm:flex-row sm:justify-end">
+      {/* Fullscreen Photo Viewer */}
+      {isImageFullscreen && selectedReport?.image &&
+        createPortal(
+          <div
+            onClick={() => setIsImageFullscreen(false)}
+            className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 p-4 backdrop-blur-md animate-in fade-in duration-200 cursor-zoom-out"
+          >
+            <div className="relative max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl">
               <button
-                onClick={() => void updateStatus(selectedReport.id, 'progress')}
-                disabled={updating}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={() => setIsImageFullscreen(false)}
+                className="absolute top-4 right-4 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/90 transition shadow-lg z-10"
               >
-                <Wrench className="h-4 w-4" />
-                {updating ? 'กำลังอัปเดต...' : 'กำลังแก้ไข'}
+                <X className="h-5 w-5" />
               </button>
-              <button
-                onClick={() => void updateStatus(selectedReport.id, 'resolved')}
-                disabled={updating}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <CheckCheck className="h-4 w-4" />
-                {updating ? 'กำลังอัปเดต...' : 'แก้ไขเสร็จสิ้น'}
-              </button>
+              <img
+                src={selectedReport.image}
+                alt="ภาพแนบขนาดเต็ม"
+                className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl"
+              />
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

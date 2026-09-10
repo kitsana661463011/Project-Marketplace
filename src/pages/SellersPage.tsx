@@ -25,6 +25,7 @@ import { mockSellers, mockNewSellerApplications } from '../data/mockData';
 import { ActionButton } from '../components/common';
 import type { Seller, NewSellerApplication } from '../types';
 import { formatImageUrl } from '../utils/imageUtils';
+import { formatThaiDateTime } from '../utils/dateUtils';
 
 type ActiveTab = 'sellers' | 'applications';
 
@@ -41,24 +42,7 @@ const formatCitizenId = (id: string | null | undefined) => {
 };
 
 const formatDate = (dateString: string | null | undefined) => {
-  const value = typeof dateString === 'string' ? dateString.trim() : dateString;
-
-  if (!value || value === '-' || value === 'Invalid Date') {
-    return 'ไม่ระบุวันที่';
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'ไม่ระบุวันที่';
-  }
-
-  return `${date.toLocaleDateString('th-TH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })} น.`;
+  return formatThaiDateTime(dateString, 'ไม่ระบุวันที่');
 };
 
 const SellersPage: React.FC = () => {

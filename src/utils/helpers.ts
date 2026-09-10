@@ -1,3 +1,5 @@
+import { formatThaiDate, formatThaiDateTime } from './dateUtils';
+
 /**
  * Utility function to combine classNames
  * Useful for conditional class combinations
@@ -9,43 +11,37 @@ export const cn = (...classes: (string | undefined | null | false)[]): string =>
 /**
  * Format a date to Thai locale
  */
-export const formatDateThai = (date: Date): string => {
-  return date.toLocaleDateString('th-TH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+export const formatDateThai = (date?: string | number | Date | null): string => {
+  return formatThaiDate(date);
 };
 
 /**
  * Format a date and time to Thai locale
  */
-export const formatDateTimeThai = (date: Date): string => {
-  return date.toLocaleDateString('th-TH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+export const formatDateTimeThai = (date?: string | number | Date | null): string => {
+  return formatThaiDateTime(date);
 };
 
 /**
  * Format relative time (e.g., "2 hours ago")
  */
-export const formatRelativeTime = (date: Date): string => {
+export const formatRelativeTime = (value?: string | number | Date | null): string => {
+  if (!value) return '-';
+  const date = typeof value === 'string' || typeof value === 'number' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return '-';
+
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'เพิ่งนี้';
+  if (diffMins < 1) return 'เมื่อสักครู่';
   if (diffMins < 60) return `${diffMins} นาทีที่แล้ว`;
   if (diffHours < 24) return `${diffHours} ชั่วโมงที่แล้ว`;
   if (diffDays < 7) return `${diffDays} วันที่แล้ว`;
 
-  return formatDateThai(date);
+  return formatThaiDate(date);
 };
 
 /**

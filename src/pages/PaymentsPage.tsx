@@ -1,67 +1,85 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Info, Save, Trash2, UploadCloud, Eye, CheckCircle2, Clock, Inbox, Receipt, XCircle, ExternalLink, CreditCard, User, FileText, ImageOff, Search, ChevronLeft, ChevronRight, Copy, Check, QrCode } from 'lucide-react';
+import { Info, Save, Trash2, UploadCloud, Eye, CheckCircle2, Clock, Inbox, Receipt, XCircle, ExternalLink, CreditCard, User, FileText, ImageOff, Search, ChevronLeft, ChevronRight, Copy, Check, QrCode, Plus, Edit3, Landmark, X } from 'lucide-react';
 import { formatImageUrl } from '../utils/imageUtils';
+import { formatThaiDateTime } from '../utils/dateUtils';
+import { ThaiBankLogo } from '../components/ThaiBankLogo';
 
-type PaymentSettingsResponse = {
-  status: boolean;
-  message: string;
-  data: {
-    id?: number;
-    account_name?: string;
-    account_number?: string;
-    qr_code_path?: string | null;
-  } | null;
+export interface ThaiBankMeta {
+  code: string;
+  name: string;
+  shortName: string;
+  color: string;
+  badgeBg: string;
+  badgeText: string;
+  accentBorder: string;
+}
+
+export const THAI_BANKS: ThaiBankMeta[] = [
+  { code: 'promptpay', name: 'พร้อมเพย์ (PromptPay)', shortName: 'พร้อมเพย์', color: '#003d7c', badgeBg: 'bg-blue-600', badgeText: 'text-white', accentBorder: 'border-blue-300' },
+  { code: 'kbank', name: 'ธนาคารกสิกรไทย (KBANK)', shortName: 'กสิกรไทย', color: '#137f44', badgeBg: 'bg-emerald-600', badgeText: 'text-white', accentBorder: 'border-emerald-300' },
+  { code: 'scb', name: 'ธนาคารไทยพาณิชย์ (SCB)', shortName: 'ไทยพาณิชย์', color: '#4e2a84', badgeBg: 'bg-purple-700', badgeText: 'text-white', accentBorder: 'border-purple-300' },
+  { code: 'bbl', name: 'ธนาคารกรุงเทพ (BBL)', shortName: 'กรุงเทพ', color: '#1e3f8a', badgeBg: 'bg-blue-800', badgeText: 'text-white', accentBorder: 'border-blue-300' },
+  { code: 'ktb', name: 'ธนาคารกรุงไทย (KTB)', shortName: 'กรุงไทย', color: '#00a6e6', badgeBg: 'bg-sky-500', badgeText: 'text-white', accentBorder: 'border-sky-300' },
+  { code: 'bay', name: 'ธนาคารกรุงศรีอยุธยา (BAY)', shortName: 'กรุงศรี', color: '#fec43b', badgeBg: 'bg-amber-500', badgeText: 'text-slate-900', accentBorder: 'border-amber-300' },
+  { code: 'ttb', name: 'ธนาคารทหารไทยธนชาต (TTB)', shortName: 'ทีทีบี', color: '#002d63', badgeBg: 'bg-blue-900', badgeText: 'text-white', accentBorder: 'border-blue-300' },
+  { code: 'gsb', name: 'ธนาคารออมสิน (GSB)', shortName: 'ออมสิน', color: '#eb1985', badgeBg: 'bg-pink-600', badgeText: 'text-white', accentBorder: 'border-pink-300' },
+  { code: 'baac', name: 'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)', shortName: 'ธ.ก.ส.', color: '#224a25', badgeBg: 'bg-emerald-800', badgeText: 'text-white', accentBorder: 'border-emerald-300' },
+  { code: 'other', name: 'บัญชีธนาคารอื่นๆ', shortName: 'อื่นๆ', color: '#475569', badgeBg: 'bg-slate-700', badgeText: 'text-white', accentBorder: 'border-slate-300' },
+];
+
+export interface MarketBankAccount {
+  id: number;
+  bank_code: string;
+  bank_name?: string;
+  account_name: string;
+  account_number: string;
+  qr_code_path?: string | null;
+  is_active: boolean;
+  is_default?: boolean;
+  sort_order?: number;
+}
+
+const initialBankForm = {
+  bank_code: 'promptpay',
+  bank_name: 'พร้อมเพย์ (PromptPay)',
+  account_name: '',
+  account_number: '',
+  is_active: true,
 };
 
-const initialFormData = {
-  accountName: '',
-  accountNumber: '',
+const getBankCodeFromName = (name?: string | null) => {
+  if (!name) return 'promptpay';
+  const n = name.toLowerCase();
+  if (n.includes('กสิกร') || n.includes('kbank')) return 'kbank';
+  if (n.includes('ไทยพาณิชย์') || n.includes('scb')) return 'scb';
+  if (n.includes('กรุงเทพ') || n.includes('bbl')) return 'bbl';
+  if (n.includes('กรุงไทย') || n.includes('ktb')) return 'ktb';
+  if (n.includes('กรุงศรี') || n.includes('bay')) return 'bay';
+  if (n.includes('ทหารไทย') || n.includes('ttb')) return 'ttb';
+  if (n.includes('ออมสิน') || n.includes('gsb')) return 'gsb';
+  if (n.includes('ธ.ก.ส') || n.includes('baac')) return 'baac';
+  if (n.includes('พร้อมเพย์') || n.includes('promptpay')) return 'promptpay';
+  return 'promptpay';
 };
 
 const PaymentsPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [formData, setFormData] = useState(initialFormData);
-  const [selectedFileName, setSelectedFileName] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState<MarketBankAccount[]>([]);
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [editingBank, setEditingBank] = useState<MarketBankAccount | null>(null);
+  const [bankFormData, setBankFormData] = useState(initialBankForm);
+  const [bankQrFile, setBankQrFile] = useState<File | null>(null);
+  const [bankQrPreview, setBankQrPreview] = useState<string | null>(null);
+  const [removeBankQr, setRemoveBankQr] = useState<boolean>(false);
+  const [isSavingBank, setIsSavingBank] = useState(false);
+  const [activeQrModal, setActiveQrModal] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [qrCodePreview, setQrCodePreview] = useState<string | null>(null);
-
-  const qrCodeUrl = useMemo(() => {
-    if (!qrCodePreview) return null;
-    if (
-      qrCodePreview.startsWith('http') ||
-      qrCodePreview.startsWith('data:')
-    ) {
-      return qrCodePreview;
-    }
-    const cleanPath = qrCodePreview.replace(/^\/storage\//, '').replace(/^storage\//, '').replace(/^\/api\/images\//, '');
-    return `/api/images/${cleanPath}`;
-  }, [qrCodePreview]);
-
-  const handleInputChange = (field: 'accountName' | 'accountNumber', value: string) => {
-    setFormData((current) => ({ ...current, [field]: value }));
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    setSelectedFileName(file?.name ?? '');
-    setSelectedFile(file ?? null);
-
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setQrCodePreview(typeof reader.result === 'string' ? reader.result : null);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  const [selectedBankDetail, setSelectedBankDetail] = useState<MarketBankAccount | null>(null);
 
   const loadSettings = async () => {
     try {
@@ -71,14 +89,23 @@ const PaymentsPage: React.FC = () => {
         throw new Error('Unable to load payment settings');
       }
 
-      const payload = (await response.json()) as PaymentSettingsResponse;
-      const settings = payload.data;
-
-      setFormData({
-        accountName: settings?.account_name ?? '',
-        accountNumber: settings?.account_number ?? '',
-      });
-      setQrCodePreview(settings?.qr_code_path ?? null);
+      const payload = await response.json();
+      const rawAccounts = payload?.data?.accounts;
+      let accountList: MarketBankAccount[] = [];
+      if (Array.isArray(rawAccounts)) {
+        accountList = rawAccounts;
+      } else if (payload?.data && payload.data.account_name) {
+        accountList = [{
+          id: payload.data.id || 1,
+          bank_code: payload.data.bank_code || 'promptpay',
+          bank_name: payload.data.bank_name || 'พร้อมเพย์ (PromptPay)',
+          account_name: payload.data.account_name,
+          account_number: payload.data.account_number,
+          qr_code_path: payload.data.qr_code_path,
+          is_active: payload.data.is_active ?? true,
+        }];
+      }
+      setBankAccounts(accountList);
     } catch {
       setErrorMessage('ไม่สามารถดึงข้อมูลบัญชีรับชำระเงินได้ในขณะนี้');
     } finally {
@@ -290,22 +317,77 @@ const PaymentsPage: React.FC = () => {
     void loadPayments();
   }, []);
 
-  const handleSaveClick = () => {
-    setErrorMessage('');
-    setSuccessMessage('');
-    setIsConfirmModalOpen(true);
+  const openAddBankModal = () => {
+    setEditingBank(null);
+    setBankFormData(initialBankForm);
+    setBankQrFile(null);
+    setBankQrPreview(null);
+    setRemoveBankQr(false);
+    setIsBankModalOpen(true);
   };
 
-  const handleConfirmSave = async () => {
+  const openEditBankModal = (acc: MarketBankAccount) => {
+    setEditingBank(acc);
+    setBankFormData({
+      bank_code: acc.bank_code || 'promptpay',
+      bank_name: acc.bank_name || 'พร้อมเพย์ (PromptPay)',
+      account_name: acc.account_name,
+      account_number: acc.account_number,
+      is_active: acc.is_active ?? true,
+    });
+    setBankQrFile(null);
+    setBankQrPreview(acc.qr_code_path ? `/api/images/${acc.qr_code_path.replace(/^\/storage\//, '').replace(/^storage\//, '').replace(/^\/api\/images\//, '')}` : null);
+    setRemoveBankQr(false);
+    setIsBankModalOpen(true);
+  };
+
+  const handleBankFormChange = (field: string, value: any) => {
+    setBankFormData((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === 'bank_code') {
+        const found = THAI_BANKS.find((b) => b.code === value);
+        if (found) {
+          next.bank_name = found.name;
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleBankQrChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setBankQrFile(file);
+      setRemoveBankQr(false);
+      const reader = new FileReader();
+      reader.onload = () => {
+        setBankQrPreview(typeof reader.result === 'string' ? reader.result : null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveBankAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      setIsSaving(true);
-      setIsConfirmModalOpen(false);
+      setIsSavingBank(true);
+      setErrorMessage('');
+      setSuccessMessage('');
 
       const formPayload = new FormData();
-      formPayload.append('account_name', formData.accountName);
-      formPayload.append('account_number', formData.accountNumber);
-      if (selectedFile) {
-        formPayload.append('qr_code', selectedFile);
+      if (editingBank?.id) {
+        formPayload.append('id', String(editingBank.id));
+      }
+      formPayload.append('bank_code', bankFormData.bank_code);
+      formPayload.append('bank_name', bankFormData.bank_name);
+      formPayload.append('account_name', bankFormData.account_name);
+      formPayload.append('account_number', bankFormData.account_number);
+      formPayload.append('is_active', bankFormData.is_active ? '1' : '0');
+      if (removeBankQr) {
+        formPayload.append('remove_qr_code', '1');
+      }
+      if (bankQrFile) {
+        formPayload.append('qr_code', bankQrFile);
       }
 
       const response = await fetch('/api/admin/market-payment-settings', {
@@ -313,59 +395,57 @@ const PaymentsPage: React.FC = () => {
         body: formPayload,
       });
 
-      const payload = (await response.json()) as PaymentSettingsResponse;
+      const payload = await response.json();
       if (!response.ok || !payload.status) {
-        throw new Error(payload.message || 'Unable to save payment settings');
+        throw new Error(payload.message || 'Unable to save bank account');
       }
 
-      setSuccessMessage('บันทึกข้อมูลบัญชีและ QR Code สำเร็จแล้ว');
-      setErrorMessage('');
-      setSelectedFileName('');
-      setSelectedFile(null);
-      setQrCodePreview(payload.data?.qr_code_path ?? null);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+      setSuccessMessage(editingBank ? 'บันทึกข้อมูลบัญชีธนาคารเรียบร้อยแล้ว' : 'เพิ่มบัญชีธนาคารรับเงินเรียบร้อยแล้ว');
+      setIsBankModalOpen(false);
+      void loadSettings();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'เกิดข้อผิดพลาดในการบันทึกบัญชี');
     } finally {
-      setIsSaving(false);
+      setIsSavingBank(false);
     }
   };
 
-  const handleRemoveQrCode = async () => {
+  const handleDeleteBankAccount = async (id: number) => {
+    if (!window.confirm('คุณต้องการลบบัญชีธนาคารนี้ใช่หรือไม่?')) return;
     try {
-      setIsSaving(true);
-      const formPayload = new FormData();
-      formPayload.append('account_name', formData.accountName);
-      formPayload.append('account_number', formData.accountNumber);
-      formPayload.append('remove_qr_code', '1');
-
-      const response = await fetch('/api/admin/market-payment-settings', {
-        method: 'POST',
-        body: formPayload,
+      setIsLoading(true);
+      const res = await fetch(`/api/admin/market-payment-settings/${id}`, {
+        method: 'DELETE',
       });
-
-      const payload = (await response.json()) as PaymentSettingsResponse;
-      if (!response.ok || !payload.status) {
-        throw new Error(payload.message || 'Unable to remove QR code');
+      const payload = await res.json();
+      if (!res.ok || !payload.status) {
+        throw new Error(payload.message || 'Unable to delete account');
       }
-
-      setQrCodePreview(null);
-      setSuccessMessage('ลบ QR Code สำเร็จแล้ว');
-      setErrorMessage('');
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการลบ QR Code');
+      setSuccessMessage('ลบบัญชีธนาคารเรียบร้อยแล้ว');
+      void loadSettings();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'เกิดข้อผิดพลาดในการลบบัญชี');
     } finally {
-      setIsSaving(false);
+      setIsLoading(false);
     }
   };
 
-  const handleCancel = () => {
-    setFormData(initialFormData);
-    setSelectedFileName('');
-    setSelectedFile(null);
-    setSuccessMessage('');
-    setErrorMessage('');
-    setIsConfirmModalOpen(false);
-    void loadSettings();
+  const handleToggleBankActive = async (acc: MarketBankAccount) => {
+    try {
+      const res = await fetch(`/api/admin/market-payment-settings/${acc.id}/toggle-active`, {
+        method: 'PATCH',
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload.status) {
+        throw new Error(payload.message || 'Unable to toggle account status');
+      }
+      if (selectedBankDetail && selectedBankDetail.id === acc.id) {
+        setSelectedBankDetail((prev) => prev ? { ...prev, is_active: !prev.is_active } : null);
+      }
+      void loadSettings();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'ไม่สามารถเปลี่ยนสถานะบัญชีได้');
+    }
   };
 
   const summaryStats = useMemo(() => {
@@ -377,21 +457,6 @@ const PaymentsPage: React.FC = () => {
 
   return (
     <div className="space-y-8 pb-12">
-      {/* ── Page Header ── */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-600/10 text-sky-600">
-              <CreditCard className="h-4 w-4" />
-            </span>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 md:text-3xl">การชำระเงิน</h1>
-          </div>
-          <p className="mt-1.5 text-sm font-medium text-slate-500">
-            ระบบบริหารจัดการประวัติการชำระเงินของแผงค้า และการตั้งค่า QR Code รับชำระเงิน
-          </p>
-        </div>
-      </div>
-
       {(successMessage || errorMessage) && (
         <div className={`rounded-2xl border p-4 text-sm font-semibold shadow-xs animate-in fade-in duration-200 ${errorMessage
             ? 'border-red-200 bg-red-50/90 text-red-800'
@@ -404,150 +469,566 @@ const PaymentsPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── QR Code & Account Settings Section ── */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-        {/* Current QR Code Preview Card */}
-        <div className="xl:col-span-5 flex flex-col justify-between rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs transition hover:shadow-md">
+      {/* ── Multi-Bank Payment Channels Management Section ── */}
+      <section className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-5">
           <div>
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-black text-slate-900">QR Code สำหรับรับเงิน</h2>
-                <p className="mt-1 text-sm font-semibold text-slate-500">ภาพ QR Code ที่แสดงบนแอปพลิเคชันสำหรับผู้ซื้อ</p>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3.5 py-1.5 text-xs font-black text-emerald-800 border border-emerald-200/80 shadow-2xs">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                กำลังใช้งาน
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <Landmark className="h-4 w-4" />
               </span>
+              <h2 className="text-lg font-black text-slate-900">ช่องทางรับชำระเงินของตลาด (Payment Channels)</h2>
             </div>
+            <p className="mt-1 text-sm font-semibold text-slate-500">
+              ตั้งค่าบัญชีธนาคารและพร้อมเพย์สำหรับให้ผู้เช่าโอนเงินค่าจองแผงค้า (ผู้เช่าสามารถเลือกธนาคารที่ต้องการโอนได้บนแอปมือถือ)
+            </p>
+          </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50/70 p-5">
-              <div className="mx-auto flex max-w-[260px] flex-col items-center rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                {isLoading ? (
-                  <div className="flex h-48 w-48 items-center justify-center text-sm font-bold text-slate-400">
-                    กำลังโหลดข้อมูล...
+          <button
+            type="button"
+            onClick={openAddBankModal}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            <span>เพิ่มบัญชีธนาคาร</span>
+          </button>
+        </div>
+
+        {/* Bank Accounts Grid - Compact Sleek Layout */}
+        {isLoading ? (
+          <div className="py-8 text-center text-sm font-semibold text-slate-400">
+            กำลังโหลดข้อมูลบัญชีธนาคาร...
+          </div>
+        ) : bankAccounts.length === 0 ? (
+          <div className="py-8 text-center space-y-3">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+              <Landmark className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-bold text-slate-700">ยังไม่มีบัญชีธนาคารสำหรับรับชำระเงิน</p>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              กรุณาเพิ่มบัญชีธนาคารหรือพร้อมเพย์อย่างน้อย 1 ช่องทาง เพื่อให้ผู้เช่าสามารถสแกนจ่ายหรือโอนเงินผ่านแอปมือถือได้
+            </p>
+            <button
+              type="button"
+              onClick={openAddBankModal}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>เพิ่มบัญชีแรก</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {bankAccounts.map((account) => {
+              const meta = THAI_BANKS.find((b) => b.code.toLowerCase() === (account.bank_code || 'promptpay').toLowerCase()) || THAI_BANKS[0];
+
+              return (
+                <div
+                  key={account.id}
+                  onClick={() => setSelectedBankDetail(account)}
+                  className={`group relative flex items-center justify-between gap-3 rounded-2xl border bg-white p-3.5 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10 hover:border-blue-400 hover:-translate-y-1 hover:bg-gradient-to-r hover:from-white hover:to-blue-50/20 active:scale-[0.99] cursor-pointer ${
+                    account.is_active ? 'border-slate-200/90 shadow-2xs' : 'border-slate-200/60 bg-slate-50/50 opacity-70'
+                  }`}
+                  title="คลิกเพื่อดูรายละเอียดและ QR Code"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="relative shrink-0">
+                      <ThaiBankLogo bankCode={account.bank_code} size={42} className="transition-transform duration-300 group-hover:scale-105 group-hover:shadow-sm" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-black text-slate-900 truncate">{meta.shortName}</span>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                          account.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${account.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                          {account.is_active ? 'เปิดรับเงิน' : 'ปิด'}
+                        </span>
+                      </div>
+                      <p className="font-mono font-black text-xs text-blue-600 truncate mt-0.5">
+                        {account.account_number}
+                      </p>
+                      <p className="text-[11px] font-medium text-slate-500 truncate">
+                        {account.account_name}
+                      </p>
+                    </div>
                   </div>
-                ) : qrCodeUrl ? (
-                  <img src={qrCodeUrl} alt="QR Code payment" className="h-52 w-52 rounded-xl object-contain" />
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {account.qr_code_path && (
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition-transform group-hover:scale-110" title="มีรูป QR Code พร้อมใช้">
+                        <QrCode className="h-3.5 w-3.5" />
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyAccount(account.account_number);
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition active:scale-90 cursor-pointer"
+                      title="คัดลอกเลขบัญชี"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 group-hover:text-blue-600 group-hover:bg-blue-50 group-hover:translate-x-1 transition-all">
+                      <ChevronRight className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── Modal: Bank Account Detail View (Expand) ── */}
+      {selectedBankDetail && (() => {
+        const meta = THAI_BANKS.find((b) => b.code.toLowerCase() === (selectedBankDetail.bank_code || 'promptpay').toLowerCase()) || THAI_BANKS[0];
+        const qrUrl = selectedBankDetail.qr_code_path
+          ? `/api/images/${selectedBankDetail.qr_code_path.replace(/^\/storage\//, '').replace(/^storage\//, '').replace(/^\/api\/images\//, '')}`
+          : null;
+
+        return createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-in fade-in duration-200 cursor-pointer"
+            onClick={() => setSelectedBankDetail(null)}
+          >
+            <div
+              className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 cursor-default"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <ThaiBankLogo bankCode={selectedBankDetail.bank_code} size={48} />
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">{meta.name}</h3>
+                    <p className="text-xs font-semibold text-slate-400">ช่องทางรับชำระเงินของตลาด</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBankDetail(null)}
+                  className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
+                  title="ปิด"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Status Bar */}
+              <div className={`flex items-center justify-between rounded-2xl p-3.5 border ${
+                selectedBankDetail.is_active
+                  ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                  : 'bg-slate-50 border-slate-200 text-slate-700'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <span className={`h-2.5 w-2.5 rounded-full ${
+                    selectedBankDetail.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                  }`} />
+                  <span className="text-xs font-extrabold">
+                    {selectedBankDetail.is_active ? 'เปิดรับเงินอยู่ (แสดงในแอปผู้เช่า)' : 'ปิดรับเงินชั่วคราว'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggleBankActive(selectedBankDetail)}
+                  className={`px-3 py-1 rounded-xl text-xs font-black transition cursor-pointer ${
+                    selectedBankDetail.is_active
+                      ? 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 shadow-xs'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs'
+                  }`}
+                >
+                  {selectedBankDetail.is_active ? 'ปิดรับเงินชั่วคราว' : 'เปิดรับเงิน'}
+                </button>
+              </div>
+
+              {/* Account Information Card */}
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 space-y-3">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">ชื่อบัญชีผู้รับเงิน</span>
+                  <p className="text-sm font-black text-slate-900 mt-0.5">{selectedBankDetail.account_name}</p>
+                </div>
+
+                <div className="pt-2.5 border-t border-slate-200/60">
+                  <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">เลขที่บัญชี / PromptPay ID</span>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <span className="font-mono text-base font-black text-blue-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                      {selectedBankDetail.account_number}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyAccount(selectedBankDetail.account_number)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer ${
+                        copiedAccountNumber
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      {copiedAccountNumber ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-white" />
+                          <span>คัดลอกแล้ว!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5" />
+                          <span>คัดลอก</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* QR Code Card */}
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4">
+                <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider mb-2">QR Code สำหรับสแกนจ่าย</span>
+                {qrUrl ? (
+                  <div className="flex flex-col items-center gap-3 bg-white p-4 rounded-xl border border-slate-200/80">
+                    <img
+                      src={qrUrl}
+                      alt="QR Code"
+                      className="w-48 h-48 object-contain rounded-lg border border-slate-100 shadow-xs cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => setActiveQrModal(qrUrl)}
+                      title="คลิกเพื่อดูภาพขยายเต็มจอ"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setActiveQrModal(qrUrl)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      <span>คลิกเพื่อดูรูปขยายเต็มจอ</span>
+                    </button>
+                  </div>
                 ) : (
-                  <div className="flex h-52 w-52 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-center text-sm font-bold text-slate-400">
-                    ยังไม่มี QR Code
+                  <div className="text-center py-6 bg-white rounded-xl border border-dashed border-slate-200">
+                    <QrCode className="h-8 w-8 text-slate-300 mx-auto mb-1.5" />
+                    <p className="text-xs font-semibold text-slate-400">ยังไม่ได้อัปโหลดรูป QR Code สำหรับช่องทางนี้</p>
                   </div>
                 )}
-                <div className="mt-4 w-full border-t border-slate-100 pt-3 text-center">
-                  <p className="text-base font-black text-slate-900">{formData.accountName || 'ยังไม่ได้ระบุชื่อบัญชี'}</p>
-                  <p className="mt-1 text-sm font-mono font-bold text-slate-600">{formData.accountNumber || 'ยังไม่ได้ระบุเลขบัญชี'}</p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const acc = selectedBankDetail;
+                    setSelectedBankDetail(null);
+                    handleDeleteBankAccount(acc.id);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>ลบบัญชีนี้</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBankDetail(null)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    ปิด
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const acc = selectedBankDetail;
+                      setSelectedBankDetail(null);
+                      openEditBankModal(acc);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition shadow-xs cursor-pointer"
+                  >
+                    <Edit3 className="h-3.5 w-3.5" />
+                    <span>แก้ไขข้อมูล</span>
+                  </button>
                 </div>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
+        );
+      })()}
 
-          <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
-            <p className="text-sm font-semibold text-slate-500">รองรับ PromptPay ทุกธนาคาร</p>
-            <button
-              onClick={handleRemoveQrCode}
-              disabled={isSaving || !qrCodePreview}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 px-4 py-2 text-sm font-bold text-red-600 transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Trash2 size={16} />
-              {isSaving ? 'กำลังลบ...' : 'ลบ QR Code'}
-            </button>
-          </div>
-        </div>
-
-        {/* Upload & Info Settings Card */}
-        <div className="xl:col-span-7 flex flex-col justify-between rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs transition hover:shadow-md">
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-lg font-black text-slate-900">อัปโหลด QR Code & บัญชีรับเงิน</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500">อัปเดตข้อมูลภาพ QR Code และเลขบัญชีที่ใช้ในการรับชำระเงินค่าจองแผงค้า</p>
-            </div>
-
-            <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-sky-300 bg-sky-50/50 p-6 text-center transition hover:border-sky-500 hover:bg-sky-50/90">
-              <div className="mb-2 flex h-13 w-13 items-center justify-center rounded-2xl bg-sky-100 text-sky-600 transition group-hover:scale-110">
-                <UploadCloud className="h-7 w-7" />
-              </div>
-              <p className="text-sm font-black text-slate-800">ลากไฟล์มาวางที่นี่ หรือ <span className="text-sky-600 underline">คลิกเพื่อเลือกรูปภาพ</span></p>
-              <p className="mt-1.5 text-xs font-semibold text-slate-500">รองรับภาพ PNG, JPG, JPEG (ขนาดไม่เกิน 5MB)</p>
-              <input type="file" accept="image/png,image/jpeg" className="sr-only" onChange={handleFileChange} />
-            </label>
-
-            {selectedFileName && (
-              <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-bold text-sky-800">
-                <FileText className="h-4.5 w-4.5 text-sky-600" />
-                <span>ไฟล์ที่เลือก: {selectedFileName}</span>
-              </div>
-            )}
-
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-black text-slate-800">ชื่อบัญชีผู้รับเงิน</label>
-                <input
-                  type="text"
-                  value={formData.accountName}
-                  onChange={(event) => handleInputChange('accountName', event.target.value)}
-                  placeholder="เช่น ตลาดนัดกาดหน้ามอ"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-black text-slate-800">เลขบัญชี / PromptPay</label>
-                <input
-                  type="text"
-                  value={formData.accountNumber}
-                  onChange={(event) => handleInputChange('accountNumber', event.target.value)}
-                  placeholder="เช่น 081-xxx-xxxx หรือ 123-x-xxxxx-x"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-100"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-100 pt-5">
-            <button
-              onClick={handleCancel}
-              disabled={isSaving}
-              className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-100 disabled:opacity-40"
-            >
-              ยกเลิก
-            </button>
-            <button
-              onClick={handleSaveClick}
-              disabled={isSaving}
-              className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-6 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-sky-700 active:scale-95 disabled:opacity-40"
-            >
-              <Save size={17} />
-              {isSaving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Confirmation Modal (Portaled to body for 100% backdrop blur) */}
-      {isConfirmModalOpen &&
+      {/* ── Modal: Add / Edit Bank Account ── */}
+      {isBankModalOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md">
-            <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-7 shadow-2xl animate-in fade-in zoom-in duration-150">
-              <h3 className="text-lg font-black text-slate-900">ยืนยันการบันทึกข้อมูลบัญชีและ QR Code?</h3>
-              <p className="mt-2 text-sm leading-6 font-medium text-slate-600">
-                คุณต้องการบันทึกการเปลี่ยนแปลงข้อมูลบัญชีและรูปภาพ QR Code รับชำระเงินนี้ใช่หรือไม่?
-              </p>
-
-              <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-600">
+                    <Landmark className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">
+                      {editingBank ? 'แก้ไขบัญชีธนาคารรับเงิน' : 'เพิ่มบัญชีธนาคารรับเงินใหม่'}
+                    </h3>
+                    <p className="text-xs text-slate-400">สำหรับรับโอนเงินค่าจองแผงค้าในตลาด</p>
+                  </div>
+                </div>
                 <button
-                  onClick={() => setIsConfirmModalOpen(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-100"
+                  type="button"
+                  onClick={() => setIsBankModalOpen(false)}
+                  className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
                 >
-                  ยกเลิก
-                </button>
-                <button
-                  onClick={handleConfirmSave}
-                  disabled={isSaving}
-                  className="rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-sky-700 disabled:opacity-40"
-                >
-                  {isSaving ? 'กำลังบันทึก...' : 'ยืนยันการบันทึก'}
+                  <X className="h-5 w-5" />
                 </button>
               </div>
+
+              <form onSubmit={handleSaveBankAccount} className="space-y-4">
+                {/* 1. Quick Select Thai Bank */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-2">
+                    เลือกธนาคาร / ช่องทางรับเงิน <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {THAI_BANKS.map((bank) => {
+                      const isSelected = bankFormData.bank_code.toLowerCase() === bank.code.toLowerCase();
+                      return (
+                        <button
+                          key={bank.code}
+                          type="button"
+                          onClick={() => handleBankFormChange('bank_code', bank.code)}
+                          className={`relative flex items-center gap-2.5 rounded-2xl border p-2.5 text-left transition-all duration-200 cursor-pointer overflow-hidden ${
+                            isSelected
+                              ? 'border-blue-600 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-blue-50/80 ring-2 ring-blue-500/25 shadow-sm scale-[1.02]'
+                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80 hover:-translate-y-0.5 hover:shadow-2xs'
+                          }`}
+                        >
+                          <ThaiBankLogo bankCode={bank.code} size={28} className="transition-transform duration-200 group-hover:scale-105" />
+                          <span className="text-xs font-black text-slate-800 truncate flex-1">{bank.shortName}</span>
+                          {isSelected && (
+                            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-2xs animate-in zoom-in duration-200">
+                              <Check className="h-2.5 w-2.5 stroke-[3]" />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Account Name */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    ชื่อบัญชีผู้รับเงิน <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="เช่น ตลาดนัดกาดหน้ามอ, บจก. มาร์เก็ตเพลส"
+                    value={bankFormData.account_name}
+                    onChange={(e) => handleBankFormChange('account_name', e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+
+                {/* 3. Account Number */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    เลขที่บัญชี หรือ เบอร์ PromptPay <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="เช่น 123-4-56789-0 หรือ 081-xxx-xxxx"
+                    value={bankFormData.account_number}
+                    onChange={(e) => handleBankFormChange('account_number', e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono"
+                  />
+                </div>
+
+                {/* 4. QR Code Image File Upload & Direct Preview with Animated Viewfinder */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-black text-slate-800">
+                      รูปภาพ QR Code สำหรับสแกนจ่าย
+                    </label>
+                    {bankQrPreview && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-2xs">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        {bankQrFile ? 'เลือกไฟล์ใหม่แล้ว' : 'QR Code ปัจจุบันพร้อมใช้'}
+                      </span>
+                    )}
+                  </div>
+
+                  <input
+                    type="file"
+                    id="bank-qr-upload-input"
+                    accept="image/png,image/jpeg"
+                    className="hidden"
+                    onChange={handleBankQrChange}
+                  />
+
+                  {bankQrPreview ? (
+                    <div className="relative group overflow-hidden rounded-3xl border-2 border-blue-200/90 bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/40 p-4.5 transition-all duration-300 hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/10">
+                      {/* Ambient background decoration */}
+                      <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-blue-400/10 blur-2xl pointer-events-none group-hover:bg-blue-500/15 transition-colors" />
+
+                      <div className="relative flex flex-col sm:flex-row items-center gap-5">
+                        {/* Interactive QR Viewfinder Box */}
+                        <div
+                          onClick={() => document.getElementById('bank-qr-upload-input')?.click()}
+                          className="relative h-32 w-32 shrink-0 rounded-2xl overflow-hidden border-2 border-slate-200/90 bg-white shadow-md cursor-pointer group/img transition-all duration-300 hover:border-blue-500 hover:scale-105"
+                          title="คลิกเพื่อเปลี่ยนรูปภาพ QR Code"
+                        >
+                          {/* 4 Viewfinder Corner Brackets */}
+                          <span className="absolute top-1.5 left-1.5 w-3.5 h-3.5 border-t-2 border-l-2 border-blue-500 rounded-tl-sm z-20 transition-all duration-300 group-hover/img:border-cyan-500" />
+                          <span className="absolute top-1.5 right-1.5 w-3.5 h-3.5 border-t-2 border-r-2 border-blue-500 rounded-tr-sm z-20 transition-all duration-300 group-hover/img:border-cyan-500" />
+                          <span className="absolute bottom-1.5 left-1.5 w-3.5 h-3.5 border-b-2 border-l-2 border-blue-500 rounded-bl-sm z-20 transition-all duration-300 group-hover/img:border-cyan-500" />
+                          <span className="absolute bottom-1.5 right-1.5 w-3.5 h-3.5 border-b-2 border-r-2 border-blue-500 rounded-br-sm z-20 transition-all duration-300 group-hover/img:border-cyan-500" />
+
+                          {/* Laser Scanline Sweep Animation */}
+                          <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_10px_#06b6d4] animate-scanline pointer-events-none z-20" />
+
+                          {/* QR Image */}
+                          <img
+                            src={bankQrPreview}
+                            alt="QR Code Preview"
+                            className="h-full w-full object-contain p-2 transition-transform duration-300 group-hover/img:scale-110"
+                          />
+
+                          {/* Glassmorphism Hover Overlay */}
+                          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs opacity-0 group-hover/img:opacity-100 transition-all duration-200 flex flex-col items-center justify-center text-white gap-1.5 z-30">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 backdrop-blur-md shadow-sm">
+                              <UploadCloud className="h-4 w-4 animate-bounce" />
+                            </div>
+                            <span className="text-[11px] font-black tracking-wide">เปลี่ยนรูป</span>
+                          </div>
+                        </div>
+
+                        {/* Details & Quick Action Buttons */}
+                        <div className="flex-1 text-center sm:text-left space-y-2.5 min-w-0">
+                          <div>
+                            <div className="flex items-center justify-center sm:justify-start gap-1.5">
+                              <QrCode className="h-4 w-4 text-blue-600" />
+                              <p className="text-xs font-black text-slate-900 truncate">
+                                {bankQrFile ? bankQrFile.name : 'รูปภาพ QR Code พร้อมใช้งาน'}
+                              </p>
+                            </div>
+                            <p className="text-[11px] font-medium text-slate-500 mt-1 leading-relaxed">
+                              {bankQrFile
+                                ? '✨ ได้ทำการเลือกรูปภาพใหม่แล้ว กดปุ่ม "บันทึกบัญชี" ด้านล่างเพื่อใช้งาน'
+                                : 'คลิกที่รูปภาพ QR Code ด้านซ้าย หรือกดปุ่มเปลี่ยนรูปเพื่ออัปเดตรูปใหม่'}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => document.getElementById('bank-qr-upload-input')?.click()}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-xs font-black transition-all shadow-sm shadow-blue-500/20 active:scale-95 cursor-pointer"
+                            >
+                              <UploadCloud className="h-3.5 w-3.5" />
+                              <span>เปลี่ยนรูป QR Code</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBankQrFile(null);
+                                setBankQrPreview(null);
+                                setRemoveBankQr(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 text-xs font-black transition-all border border-rose-200/80 active:scale-95 cursor-pointer"
+                              title="ลบรูปภาพ QR Code ออกจากบัญชีนี้"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>ลบรูปภาพ</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Animated Empty Dropzone */
+                    <div
+                      onClick={() => document.getElementById('bank-qr-upload-input')?.click()}
+                      className="group relative overflow-hidden flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-gradient-to-b from-slate-50/90 via-blue-50/20 to-indigo-50/30 p-7 text-center transition-all duration-300 hover:border-blue-500 hover:bg-blue-50/40 hover:shadow-lg hover:shadow-blue-500/10"
+                    >
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white shadow-md shadow-blue-500/25 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 mb-3">
+                        <QrCode className="h-7 w-7" />
+                      </div>
+                      <p className="text-xs font-black text-slate-900 group-hover:text-blue-600 transition-colors">
+                        คลิกเพื่ออัปโหลดภาพ QR Code สำหรับรับเงิน
+                      </p>
+                      <p className="text-[11px] font-medium text-slate-400 mt-1 max-w-xs">
+                        รองรับไฟล์ PNG, JPG ขนาดไม่เกิน 5MB (ผู้เช่าจะสามารถสแกนจ่ายผ่านแอปได้ทันที)
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Active Toggle */}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="bank_active_checkbox"
+                    checked={bankFormData.is_active}
+                    onChange={(e) => handleBankFormChange('is_active', e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="bank_active_checkbox" className="text-xs font-bold text-slate-700 cursor-pointer">
+                    เปิดใช้งานรับชำระเงินทันที
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsBankModalOpen(false)}
+                    className="rounded-2xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingBank}
+                    className="flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <Save className="h-4 w-4" />
+                    <span>{isSavingBank ? 'กำลังบันทึก...' : 'บันทึกบัญชี'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ── Modal: View QR Code Full Image ── */}
+      {activeQrModal &&
+        createPortal(
+          <div
+            onClick={() => setActiveQrModal(null)}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-in fade-in duration-200"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-w-sm w-full rounded-3xl bg-white p-6 shadow-2xl text-center space-y-4 animate-in zoom-in-95 duration-200"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h4 className="text-sm font-black text-slate-900">QR Code สำหรับรับชำระเงิน</h4>
+                <button
+                  type="button"
+                  onClick={() => setActiveQrModal(null)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="mx-auto flex items-center justify-center p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                <img src={activeQrModal} alt="QR Code Full" className="max-h-72 w-auto object-contain rounded-xl" />
+              </div>
+              <p className="text-xs text-slate-400">สแกนผ่านแอปพลิเคชันธนาคารเพื่อทำรายการ</p>
             </div>
           </div>,
           document.body
@@ -564,35 +1045,41 @@ const PaymentsPage: React.FC = () => {
             }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-slate-600 uppercase tracking-wider">ทั้งหมด</span>
+            <span className="text-xs font-black text-slate-600 uppercase tracking-wider">ธุรกรรมทั้งหมด</span>
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 group-hover:bg-sky-600 group-hover:text-white transition-colors">
               <Inbox className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4 flex items-baseline justify-between">
+          <div className="mt-3 flex items-baseline justify-between">
             <p className="text-3xl font-black text-slate-900 tracking-tight">{summaryStats.total}</p>
-            <span className="text-xs font-extrabold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-md">รายการ</span>
+            <span className="text-xs font-extrabold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-md">รายการทั้งหมด</span>
           </div>
+          <p className="mt-2 text-[11px] font-semibold text-slate-500">
+            รวมรายการเงินเข้าตลาดและยอดโอนคืนผู้ค้าทั้งหมด
+          </p>
         </div>
 
         {/* 2. Refunded */}
         <div
           onClick={() => setStatusFilter('refunded')}
           className={`group cursor-pointer rounded-3xl border p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${statusFilter === 'refunded'
-              ? 'border-blue-400 bg-white ring-2 ring-blue-400/30 shadow-md'
+              ? 'border-sky-500 bg-white ring-2 ring-sky-400/30 shadow-md'
               : 'border-slate-200/80 bg-white hover:border-blue-300'
             }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-blue-900 uppercase tracking-wider">คืนเงินแล้ว</span>
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+            <span className="text-xs font-black text-sky-900 uppercase tracking-wider">คืนเงินแล้ว (Refunded)</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 group-hover:bg-sky-600 group-hover:text-white transition-colors">
               <CheckCircle2 className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4 flex items-baseline justify-between">
-            <p className="text-3xl font-black text-blue-700 tracking-tight">{summaryStats.refunded}</p>
-            <span className="text-xs font-extrabold text-blue-800 bg-blue-50 px-2.5 py-1 rounded-md">คืนเงินเรียบร้อย</span>
+          <div className="mt-3 flex items-baseline justify-between">
+            <p className="text-3xl font-black text-sky-700 tracking-tight">{summaryStats.refunded}</p>
+            <span className="text-xs font-extrabold text-sky-800 bg-sky-50 px-2.5 py-1 rounded-md">โอนคืนเรียบร้อย</span>
           </div>
+          <p className="mt-2 text-[11px] font-semibold text-sky-700">
+            แอดมินโอนเงินคืนเข้าบัญชีผู้ค้าแล้ว มีสลิปยืนยันในระบบ
+          </p>
         </div>
 
         {/* 3. Verified Success */}
@@ -604,15 +1091,18 @@ const PaymentsPage: React.FC = () => {
             }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-emerald-900 uppercase tracking-wider">สำเร็จ</span>
+            <span className="text-xs font-black text-emerald-900 uppercase tracking-wider">สำเร็จ (Verified)</span>
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
               <CheckCircle2 className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4 flex items-baseline justify-between">
+          <div className="mt-3 flex items-baseline justify-between">
             <p className="text-3xl font-black text-emerald-700 tracking-tight">{summaryStats.verified}</p>
-            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">อนุมัติสำเร็จ</span>
+            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">เงินเข้าตลาดแล้ว</span>
           </div>
+          <p className="mt-2 text-[11px] font-semibold text-emerald-700">
+            ตรวจสลิปถูกต้อง ได้รับเงินแล้ว อนุมัติสิทธิ์เข้าใช้แผงค้า
+          </p>
         </div>
       </div>
 
@@ -621,7 +1111,60 @@ const PaymentsPage: React.FC = () => {
         {/* Table Header Controls */}
         <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-lg font-black text-slate-900">ประวัติการชำระเงิน</h2>
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-lg font-black text-slate-900">ประวัติการชำระเงิน</h2>
+
+              {/* Hover Tooltip Icon (i) */}
+              <div className="relative group inline-flex items-center">
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white transition-all duration-200 shadow-2xs cursor-pointer"
+                  title="ดูคำอธิบายสถานะ"
+                  aria-label="ดูคำอธิบายสถานะ"
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </button>
+
+                {/* Floating Tooltip Card */}
+                <div className="pointer-events-none absolute left-0 top-full mt-2.5 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md p-4 shadow-2xl opacity-0 invisible -translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-200 z-50">
+                  <div className="flex items-center gap-2 mb-3 border-b border-slate-100 pb-2">
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                      คำอธิบายความหมายของสถานะ
+                    </h4>
+                  </div>
+                  <div className="space-y-3 text-xs">
+                    {/* Status: Verified */}
+                    <div className="flex items-start gap-2.5 rounded-xl bg-emerald-50/70 p-2.5 border border-emerald-100/80">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white shrink-0 mt-0.5 shadow-2xs">
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span>สำเร็จ</span>
+                      </span>
+                      <div>
+                        <p className="font-bold text-emerald-950 text-xs">เงินเข้าบัญชีตลาดแล้ว</p>
+                        <p className="text-[11px] text-emerald-800 font-medium mt-0.5 leading-relaxed">
+                          ผู้ค้าชำระเงินและตรวจสลิปผ่านแล้ว สัญญาเช่าแผงค้าอนุมัติพร้อมเปิดให้เข้าใช้ล็อกแผงค้าได้ทันที
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Status: Refunded */}
+                    <div className="flex items-start gap-2.5 rounded-xl bg-sky-50/70 p-2.5 border border-sky-100/80">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-black text-white shrink-0 mt-0.5 shadow-2xs">
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span>คืนเงินแล้ว</span>
+                      </span>
+                      <div>
+                        <p className="font-bold text-sky-950 text-xs">โอนเงินคืนผู้ค้าแล้ว</p>
+                        <p className="text-[11px] text-sky-800 font-medium mt-0.5 leading-relaxed">
+                          คำขอจองถูกยกเลิก/ขอคืนเงิน และแอดมินได้โอนเงินคืนเข้าบัญชีธนาคารปลายทางของผู้ค้า พร้อมแนบหลักฐานสลิปในระบบแล้ว
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <p className="mt-0.5 text-sm font-semibold text-slate-500">
               แสดงรายการชำระเงิน (สูงสุด {itemsPerPage} รายการต่อหน้า)
             </p>
@@ -664,6 +1207,7 @@ const PaymentsPage: React.FC = () => {
                 <th className="px-6 py-4">วันที่ / เวลา</th>
                 <th className="px-6 py-4">ผู้ค้า / แผงค้า</th>
                 <th className="px-6 py-4">ชำระเงินค่าอะไรบ้าง (รายการค่าใช้จ่าย)</th>
+                <th className="px-6 py-4">ธนาคารปลายทาง</th>
                 <th className="px-6 py-4">ยอดเงินรวม</th>
                 <th className="px-6 py-4">สถานะ</th>
                 <th className="px-6 py-4 text-center">การกระทำ</th>
@@ -672,21 +1216,13 @@ const PaymentsPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100 text-sm">
               {paginatedPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-24 text-center text-sm font-semibold text-slate-400">
+                  <td colSpan={7} className="px-6 py-24 text-center text-sm font-semibold text-slate-400">
                     ไม่พบรายการชำระเงินตามเงื่อนไขที่เลือก
                   </td>
                 </tr>
               ) : (
                 paginatedPayments.map((txn) => {
-                  const paymentDateStr = txn.payment_date
-                    ? new Date(txn.payment_date).toLocaleString('th-TH', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })
-                    : '-';
+                  const paymentDateStr = formatThaiDateTime(txn.payment_date);
                   const tenantName = txn.booking?.user?.username || 'ไม่ระบุ';
                   const stallNum = txn.booking?.stall?.stall_number || '-';
                   const initialChar = tenantName.charAt(0).toUpperCase();
@@ -731,51 +1267,117 @@ const PaymentsPage: React.FC = () => {
                         )}
                       </td>
 
+                      {/* Destination Bank Column */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {txn.refund_bank_name || txn.destination_bank ? (
+                          <div className="flex items-center gap-2.5">
+                            <ThaiBankLogo
+                              bankCode={getBankCodeFromName(txn.refund_bank_name || txn.destination_bank)}
+                              size={34}
+                            />
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-black text-slate-900 text-xs">
+                                  {txn.refund_bank_name || txn.destination_bank}
+                                </span>
+                                {txn.status === 'refunded' && (
+                                  <span className="rounded bg-sky-100 text-sky-800 text-[9px] font-extrabold px-1.5 py-0.5">
+                                    บัญชีรับเงินคืน
+                                  </span>
+                                )}
+                              </div>
+                              {txn.refund_account_number && (
+                                <span className="font-mono text-xs font-extrabold text-blue-700 block tracking-tight">
+                                  {txn.refund_account_number}
+                                </span>
+                              )}
+                              {txn.refund_account_name && (
+                                <span className="text-[11px] text-slate-500 font-semibold block truncate max-w-[140px]">
+                                  {txn.refund_account_name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-medium">-</span>
+                        )}
+                      </td>
+
                       {/* Amount Column */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-mono font-black text-slate-900 text-base">
-                          ฿{(txn.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                        </span>
+                        {(() => {
+                          const displayAmount = Number(txn.amount || txn.booking?.total_amount || 0);
+                          return (
+                            <div>
+                              <span className={`font-mono font-black text-base ${
+                                txn.status === 'refunded' ? 'text-slate-800' : 'text-emerald-700'
+                              }`}>
+                                ฿{displayAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                              </span>
+                              {txn.status === 'refunded' ? (
+                                <span className="block text-[10px] font-extrabold text-sky-700">
+                                  (ยอดโอนคืนผู้ค้า)
+                                </span>
+                              ) : (
+                                <span className="block text-[10px] font-extrabold text-emerald-600">
+                                  (ยอดชำระสำเร็จ)
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Status Column */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         {txn.status === 'verified' || txn.status === 'success' ? (
-                          <span
-                            onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
-                            title="คลิกเพื่อดูรายละเอียดใบจองนี้"
-                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 shadow-2xs"
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            สำเร็จ
-                          </span>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span
+                              onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
+                              title="คลิกเพื่อดูรายละเอียดใบจองนี้"
+                              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 shadow-2xs"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              สำเร็จ
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-600 pl-2">เงินเข้าตลาดแล้ว</span>
+                          </div>
                         ) : txn.status === 'refund_requested' ? (
-                          <span
-                            onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
-                            title="คลิกเพื่อดูรายละเอียดใบจองนี้"
-                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-purple-50 border border-purple-200 px-3 py-1 text-xs font-bold text-purple-700 transition hover:bg-purple-100 shadow-2xs"
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse" />
-                            ขอคืนเงิน
-                          </span>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span
+                              onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
+                              title="คลิกเพื่อดูรายละเอียดใบจองนี้"
+                              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-purple-50 border border-purple-200 px-3 py-1 text-xs font-bold text-purple-700 transition hover:bg-purple-100 shadow-2xs"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse" />
+                              ขอคืนเงิน
+                            </span>
+                            <span className="text-[10px] font-bold text-purple-600 pl-2">รอแอดมินโอนคืน</span>
+                          </div>
                         ) : txn.status === 'refunded' ? (
-                          <span
-                            onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
-                            title="คลิกเพื่อดูรายละเอียดใบจองนี้"
-                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-sky-50 border border-sky-200 px-3 py-1 text-xs font-bold text-sky-700 transition hover:bg-sky-100 shadow-2xs"
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-                            คืนเงินแล้ว
-                          </span>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span
+                              onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
+                              title="คลิกเพื่อดูรายละเอียดใบจองนี้"
+                              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-sky-50 border border-sky-200 px-3 py-1 text-xs font-bold text-sky-700 transition hover:bg-sky-100 shadow-2xs"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                              คืนเงินแล้ว
+                            </span>
+                            <span className="text-[10px] font-bold text-sky-600 pl-2">โอนคืนผู้ค้าแล้ว</span>
+                          </div>
                         ) : (
-                          <span
-                            onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
-                            title="คลิกเพื่อดูรายละเอียดใบจองนี้"
-                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-bold text-amber-700 transition hover:bg-amber-100 shadow-2xs"
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            รอตรวจสอบ
-                          </span>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span
+                              onClick={() => txn.booking_id && navigate(`/verifications?booking_id=${txn.booking_id}`)}
+                              title="คลิกเพื่อดูรายละเอียดใบจองนี้"
+                              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-bold text-amber-700 transition hover:bg-amber-100 shadow-2xs"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              รอตรวจสอบ
+                            </span>
+                            <span className="text-[10px] font-bold text-amber-600 pl-2">รอตรวจสลิป</span>
+                          </div>
                         )}
                       </td>
 
@@ -903,6 +1505,13 @@ const PaymentsPage: React.FC = () => {
                           <span className="text-sm font-bold text-slate-500">ยอดเงินที่ชำระ:</span>
                           <span className="font-mono font-black text-emerald-600 text-lg">
                             ฿{(selectedPayment.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center border-b border-slate-200/60 pb-2.5">
+                          <span className="text-sm font-bold text-slate-500">ช่องทาง/ธนาคาร:</span>
+                          <span className="inline-flex items-center gap-1.5 text-sm font-black text-slate-800">
+                            <Landmark className="h-4 w-4 text-blue-600" />
+                            {selectedPayment.destination_bank || 'พร้อมเพย์ / บัญชีหลักตลาด'}
                           </span>
                         </div>
                         <div className="flex justify-between items-center pt-1">
@@ -1074,7 +1683,7 @@ const PaymentsPage: React.FC = () => {
                             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                               <span className="text-slate-500 font-medium text-xs">วันที่ทำรายการ:</span>
                               <span className="font-bold text-slate-900 text-sm">
-                                {selectedPayment.payment_date ? new Date(selectedPayment.payment_date).toLocaleString('th-TH') : '-'}
+                                {formatThaiDateTime(selectedPayment.payment_date)}
                               </span>
                             </div>
                             <div className="flex justify-between items-center pb-1">
@@ -1251,7 +1860,7 @@ const PaymentsPage: React.FC = () => {
                             <div className="flex justify-between border-b border-sky-200/50 pb-1.5">
                               <span className="text-xs font-bold text-sky-700">วันที่โอนคืน:</span>
                               <span className="text-sm font-bold text-slate-900">
-                                {new Date(selectedPayment.refunded_at).toLocaleString('th-TH')}
+                                {formatThaiDateTime(selectedPayment.refunded_at)}
                               </span>
                             </div>
                           )}

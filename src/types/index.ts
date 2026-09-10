@@ -180,6 +180,25 @@ export interface IssueReport {
   priority?: 'low' | 'medium' | 'high';
   reporter?: string;
   adminNote?: string;
+  isReviewReport?: boolean;
+  reviewDetails?: {
+    report_id: number;
+    review_id: number;
+    report_reason: string;
+    report_count?: number;
+    report_status?: string;
+    shop_name: string;
+    shop_id?: number;
+    reviewer_name: string;
+    rating: number;
+    comment: string;
+    review_status?: string;
+    review_images?: string[];
+    review_date?: string;
+    reporter_name?: string;
+    reporter_phone?: string;
+    reporter_email?: string;
+  };
 }
 
 // ===== Announcements Types =====

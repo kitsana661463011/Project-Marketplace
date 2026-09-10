@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Plus, Trash2, ZoomIn, ZoomOut, Maximize2, Move, Hand, X, Check, Save, Lock, Unlock, Eye, Grid, RefreshCw, Folder, AlertCircle, HelpCircle, Store, Edit3, User, DollarSign, ChevronDown, CreditCard, Zap, Droplets
+  Plus, Trash2, ZoomIn, ZoomOut, Maximize2, Move, Hand, X, Check, Save, Lock, Unlock, Eye, Grid, RefreshCw, Folder, AlertCircle, HelpCircle, Store, Edit3, User, DollarSign, ChevronDown, CreditCard, Zap, Droplets, Camera, UploadCloud
 } from 'lucide-react';
+import { formatImageUrl } from '../utils/imageUtils';
+import { formatThaiDate } from '../utils/dateUtils';
 
 export interface ExtendedMarketZone {
   id: string;
@@ -25,6 +27,9 @@ export interface ExtendedMarketZone {
   security_deposit?: number | null;
   has_electricity?: boolean;
   has_water?: boolean;
+  image1?: string | null;
+  image2?: string | null;
+  images?: string[];
   item_type: 'block' | 'road' | 'zone' | 'entrance' | 'toilet' | 'exit' | 'dining' | 'parking' | 'info' | 'trash';
   stall_id?: number | null;
   zone_id?: number | null;
@@ -110,6 +115,15 @@ export const MarketMapPage: React.FC = () => {
   const [editHasWater, setEditHasWater] = useState<boolean>(true);
   const [editZoneId, setEditZoneId] = useState<number | null>(null);
   const [editItemType, setEditItemType] = useState<ExtendedMarketZone['item_type']>('block');
+  const [editImage1, setEditImage1] = useState<string | null>(null);
+  const [editImage2, setEditImage2] = useState<string | null>(null);
+  const [editImage1File, setEditImage1File] = useState<File | null>(null);
+  const [editImage2File, setEditImage2File] = useState<File | null>(null);
+  const [editImage1Preview, setEditImage1Preview] = useState<string | null>(null);
+  const [editImage2Preview, setEditImage2Preview] = useState<string | null>(null);
+  const [removeImage1, setRemoveImage1] = useState<boolean>(false);
+  const [removeImage2, setRemoveImage2] = useState<boolean>(false);
+  const [isSavingStallImages, setIsSavingStallImages] = useState<boolean>(false);
 
   // New Element Creation Modal States
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
@@ -128,6 +142,12 @@ export const MarketMapPage: React.FC = () => {
   const [createWidth, setCreateWidth] = useState<number>(80);
   const [createHeight, setCreateHeight] = useState<number>(80);
   const [createFillColor, setCreateFillColor] = useState<string>('#2ec4b6');
+  const [createImage1File, setCreateImage1File] = useState<File | null>(null);
+  const [createImage2File, setCreateImage2File] = useState<File | null>(null);
+  const [createImage1Preview, setCreateImage1Preview] = useState<string | null>(null);
+  const [createImage2Preview, setCreateImage2Preview] = useState<string | null>(null);
+  const [isCreatingStall, setIsCreatingStall] = useState<boolean>(false);
+  const [previewZoomImage, setPreviewZoomImage] = useState<string | null>(null);
 
   // Custom Confirmation Dialog State
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -228,6 +248,9 @@ export const MarketMapPage: React.FC = () => {
           security_deposit: item.security_deposit !== undefined && item.security_deposit !== null ? Number(item.security_deposit) : null,
           has_electricity: item.has_electricity !== undefined ? Boolean(item.has_electricity) : true,
           has_water: item.has_water !== undefined ? Boolean(item.has_water) : true,
+          image1: item.image1 || null,
+          image2: item.image2 || null,
+          images: Array.isArray(item.images) ? item.images : [],
           seller: item.seller || undefined,
         } as ExtendedMarketZone;
       });
@@ -301,6 +324,8 @@ export const MarketMapPage: React.FC = () => {
           security_deposit: s.rental_type === 'monthly' ? (s.security_deposit ?? 2000) : null,
           has_electricity: s.has_electricity ?? true,
           has_water: s.has_water ?? true,
+          image1: s.image1 || null,
+          image2: s.image2 || null,
           status: s.status || null,
         }))
       };
@@ -354,10 +379,84 @@ export const MarketMapPage: React.FC = () => {
     setEditHasWater(stall.has_water ?? true);
     setEditZoneId(stall.zone_id || null);
     setEditItemType(stall.item_type || 'block');
+    setEditImage1(stall.image1 || null);
+    setEditImage2(stall.image2 || null);
+    setEditImage1File(null);
+    setEditImage2File(null);
+    setEditImage1Preview(null);
+    setEditImage2Preview(null);
+    setRemoveImage1(false);
+    setRemoveImage2(false);
     setShowDetailModal(true);
   };
 
-  const saveStallDetails = () => {
+  const handleImage1Change = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setEditImage1File(file);
+      setRemoveImage1(false);
+      const reader = new FileReader();
+      reader.onload = () => setEditImage1Preview(typeof reader.result === 'string' ? reader.result : null);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage1 = () => {
+    setEditImage1(null);
+    setEditImage1File(null);
+    setEditImage1Preview(null);
+    setRemoveImage1(true);
+  };
+
+  const handleImage2Change = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setEditImage2File(file);
+      setRemoveImage2(false);
+      const reader = new FileReader();
+      reader.onload = () => setEditImage2Preview(typeof reader.result === 'string' ? reader.result : null);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage2 = () => {
+    setEditImage2(null);
+    setEditImage2File(null);
+    setEditImage2Preview(null);
+    setRemoveImage2(true);
+  };
+
+  const handleCreateImage1Change = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCreateImage1File(file);
+      const reader = new FileReader();
+      reader.onload = () => setCreateImage1Preview(typeof reader.result === 'string' ? reader.result : null);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveCreateImage1 = () => {
+    setCreateImage1File(null);
+    setCreateImage1Preview(null);
+  };
+
+  const handleCreateImage2Change = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCreateImage2File(file);
+      const reader = new FileReader();
+      reader.onload = () => setCreateImage2Preview(typeof reader.result === 'string' ? reader.result : null);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveCreateImage2 = () => {
+    setCreateImage2File(null);
+    setCreateImage2Preview(null);
+  };
+
+  const saveStallDetails = async () => {
     if (!editingStall) return;
 
     let newCode = editingStall.code;
@@ -368,14 +467,87 @@ export const MarketMapPage: React.FC = () => {
       }
     }
 
+    let finalImage1 = removeImage1 ? null : (editingStall.image1 || null);
+    let finalImage2 = removeImage2 ? null : (editingStall.image2 || null);
+
+    const calcPrice = editRentalType === 'daily' ? editDailyPrice : editMonthlyPrice;
+    let assignedStallId = editingStall.stall_id;
+
+    // If stall exists in DB and image changes were made, upload to backend
+    if (editingStall.stall_id && (editImage1File || editImage2File || removeImage1 || removeImage2)) {
+      try {
+        setIsSavingStallImages(true);
+        const formPayload = new FormData();
+        formPayload.append('_method', 'PUT');
+        if (editImage1File) {
+          formPayload.append('image1', editImage1File);
+        } else if (removeImage1) {
+          formPayload.append('remove_image1', '1');
+        }
+        if (editImage2File) {
+          formPayload.append('image2', editImage2File);
+        } else if (removeImage2) {
+          formPayload.append('remove_image2', '1');
+        }
+
+        const res = await fetch(`/api/v1/stalls/${editingStall.stall_id}`, {
+          method: 'POST',
+          body: formPayload,
+        });
+        if (res.ok) {
+          const resJson = await res.json();
+          if (resJson?.data) {
+            finalImage1 = resJson.data.image1;
+            finalImage2 = resJson.data.image2;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to upload stall images', err);
+      } finally {
+        setIsSavingStallImages(false);
+      }
+    } else if (!editingStall.stall_id && (editImage1File || editImage2File)) {
+      try {
+        setIsSavingStallImages(true);
+        const formPayload = new FormData();
+        formPayload.append('stall_number', newCode || ('STALL-' + Date.now().toString().slice(-4)));
+        formPayload.append('status', editStatus === 'repair' ? 'maintenance' : (editStatus || 'available'));
+        formPayload.append('zone_id', String(editZoneId || dbZones[0]?.zone_id || 1));
+        formPayload.append('size', editSize || '3x3 เมตร');
+        formPayload.append('price', String(calcPrice || 500));
+        formPayload.append('rental_type', editRentalType);
+        if (editImage1File) formPayload.append('image1', editImage1File);
+        if (editImage2File) formPayload.append('image2', editImage2File);
+
+        const res = await fetch('/api/v1/stalls', {
+          method: 'POST',
+          body: formPayload,
+        });
+        if (res.ok) {
+          const resJson = await res.json();
+          if (resJson?.data) {
+            assignedStallId = resJson.data.stall_id;
+            finalImage1 = resJson.data.image1;
+            finalImage2 = resJson.data.image2;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to upload new stall images', err);
+      } finally {
+        setIsSavingStallImages(false);
+      }
+    }
+
+    const finalImages = [finalImage1, finalImage2].filter(Boolean) as string[];
+
     setStalls(stalls.map(s => {
       if (s.id === editingStall.id) {
         const newX = snapToGrid(s.x, 10);
         const newY = snapToGrid(s.y, 10);
-        const calcPrice = editRentalType === 'daily' ? editDailyPrice : editMonthlyPrice;
 
         return {
           ...s,
+          stall_id: assignedStallId || s.stall_id,
           code: newCode,
           status: editStatus,
           size: editSize,
@@ -387,6 +559,9 @@ export const MarketMapPage: React.FC = () => {
           security_deposit: editRentalType === 'monthly' ? editSecurityDeposit : null,
           has_electricity: editHasElectricity,
           has_water: editHasWater,
+          image1: finalImage1,
+          image2: finalImage2,
+          images: finalImages,
           zone_id: (editItemType === 'block' || editItemType === 'zone') ? editZoneId : null,
           item_type: editItemType,
           x: newX,
@@ -497,12 +672,6 @@ export const MarketMapPage: React.FC = () => {
     }
   };
 
-  const formatThaiDate = (dateStr?: string) => {
-    if (!dateStr) return 'ไม่ระบุ';
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
-    return date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
-  };
 
   const snapToGrid = (val: number, step = 20) => Math.round(val / step) * step;
 
@@ -562,6 +731,11 @@ export const MarketMapPage: React.FC = () => {
     setCreateWidth(defaultWidth);
     setCreateHeight(defaultHeight);
     setCreateFillColor(type === 'block' ? '#2ec4b6' : type === 'zone' ? '#5d8aff' : '#ff9f1c');
+    setCreateImage1File(null);
+    setCreateImage2File(null);
+    setCreateImage1Preview(null);
+    setCreateImage2Preview(null);
+    setIsCreatingStall(false);
     setShowCreateModal(true);
   };
 
@@ -571,7 +745,7 @@ export const MarketMapPage: React.FC = () => {
       message: `คุณต้องการเพิ่ม "${createCode}" ลงบนแผนผังตลาดนัดใช่หรือไม่?`,
       actionText: 'ยืนยันการเพิ่มวัตถุ',
       type: 'info',
-      onConfirm: () => {
+      onConfirm: async () => {
         let finalLabel = createCode;
         if (createItemType === 'zone' && createZoneId) {
           const matched = dbZones.find(dz => dz.zone_id === createZoneId);
@@ -596,6 +770,55 @@ export const MarketMapPage: React.FC = () => {
         }
 
         const calcPrice = createRentalType === 'daily' ? createDailyPrice : createMonthlyPrice;
+        let assignedStallId: number | null = null;
+        let finalImage1: string | null = null;
+        let finalImage2: string | null = null;
+
+        if (createItemType === 'block') {
+          try {
+            setIsCreatingStall(true);
+            const formPayload = new FormData();
+            formPayload.append('stall_number', finalLabel || ('STALL-' + Date.now().toString().slice(-4)));
+            formPayload.append('status', createStatus === 'repair' ? 'maintenance' : (createStatus || 'available'));
+            formPayload.append('zone_id', String(createZoneId || dbZones[0]?.zone_id || 1));
+            formPayload.append('size', createSize || '3x3 เมตร');
+            formPayload.append('price', String(calcPrice || 500));
+            formPayload.append('rental_type', createRentalType);
+            if (createRentalType === 'daily') {
+              formPayload.append('daily_price', String(createDailyPrice));
+            } else {
+              formPayload.append('monthly_price', String(createMonthlyPrice));
+              formPayload.append('entry_fee', String(createEntryFee));
+              formPayload.append('security_deposit', String(createSecurityDeposit));
+            }
+            formPayload.append('has_electricity', createHasElectricity ? '1' : '0');
+            formPayload.append('has_water', createHasWater ? '1' : '0');
+            if (createImage1File) formPayload.append('image1', createImage1File);
+            if (createImage2File) formPayload.append('image2', createImage2File);
+
+            const res = await fetch('/api/v1/stalls', {
+              method: 'POST',
+              body: formPayload,
+            });
+            if (res.ok) {
+              const resJson = await res.json();
+              if (resJson?.data) {
+                assignedStallId = resJson.data.stall_id;
+                finalImage1 = resJson.data.image1;
+                finalImage2 = resJson.data.image2;
+              }
+            } else {
+              const errJson = await res.json().catch(() => null);
+              console.error('Failed to create stall in API', errJson);
+            }
+          } catch (err) {
+            console.error('Error uploading stall creation data', err);
+          } finally {
+            setIsCreatingStall(false);
+          }
+        }
+
+        const finalImages = [finalImage1, finalImage2].filter(Boolean) as string[];
 
         const newElement: ExtendedMarketZone = {
           id: `new-${Date.now()}`,
@@ -616,6 +839,10 @@ export const MarketMapPage: React.FC = () => {
           security_deposit: createRentalType === 'monthly' ? createSecurityDeposit : null,
           has_electricity: createItemType === 'block' ? createHasElectricity : true,
           has_water: createItemType === 'block' ? createHasWater : true,
+          stall_id: assignedStallId,
+          image1: finalImage1,
+          image2: finalImage2,
+          images: finalImages,
           item_type: createItemType,
           zone_id: (createItemType === 'block' || createItemType === 'zone') ? createZoneId : null,
         };
@@ -895,56 +1122,48 @@ export const MarketMapPage: React.FC = () => {
     <div className="space-y-4">
       {/* ── Summary KPI Dashboard Cards ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/60 p-3 shadow-2xs flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 font-extrabold shadow-2xs">
-              <Check size={18} />
-            </div>
-            <div>
-              <p className="text-xs font-extrabold text-emerald-800 uppercase tracking-wide">แผงค้าว่าง</p>
-              <p className="text-xl font-black text-emerald-900 mt-0.5">{availableCount} <span className="text-xs font-bold text-emerald-700">แผง</span></p>
-            </div>
+        {/* 1. แผงค้าว่าง */}
+        <div className="group rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs flex items-center gap-3 hover:border-emerald-300 hover:shadow-sm transition-all duration-200">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200/80 transition-all duration-200 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 group-hover:scale-105 shadow-2xs">
+            <Check size={18} />
           </div>
-          <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">แผงค้าว่าง</p>
+            <p className="text-2xl font-black text-slate-900 mt-0.5">{availableCount} <span className="text-xs font-semibold text-slate-400">แผง</span></p>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-blue-200/80 bg-blue-50/60 p-3 shadow-2xs flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700 font-extrabold shadow-2xs">
-              <Store size={18} />
-            </div>
-            <div>
-              <p className="text-xs font-extrabold text-blue-800 uppercase tracking-wide">กำลังจอง</p>
-              <p className="text-xl font-black text-blue-900 mt-0.5">{pendingCount} <span className="text-xs font-bold text-blue-700">แผง</span></p>
-            </div>
+        {/* 2. กำลังจอง */}
+        <div className="group rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs flex items-center gap-3 hover:border-blue-300 hover:shadow-sm transition-all duration-200">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-200/80 transition-all duration-200 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 group-hover:scale-105 shadow-2xs">
+            <Store size={18} />
           </div>
-          <span className="h-3 w-3 rounded-full bg-blue-500 animate-pulse" />
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">กำลังจอง</p>
+            <p className="text-2xl font-black text-slate-900 mt-0.5">{pendingCount} <span className="text-xs font-semibold text-slate-400">แผง</span></p>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-rose-200/80 bg-rose-50/60 p-3 shadow-2xs flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 text-rose-700 font-extrabold shadow-2xs">
-              <Store size={18} />
-            </div>
-            <div>
-              <p className="text-xs font-extrabold text-rose-800 uppercase tracking-wide">มีผู้เช่าแล้ว</p>
-              <p className="text-xl font-black text-rose-900 mt-0.5">{occupiedCount} <span className="text-xs font-bold text-rose-700">แผง</span></p>
-            </div>
+        {/* 3. มีผู้เช่าแล้ว */}
+        <div className="group rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs flex items-center gap-3 hover:border-rose-300 hover:shadow-sm transition-all duration-200">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 border border-rose-200/80 transition-all duration-200 group-hover:bg-rose-600 group-hover:text-white group-hover:border-rose-600 group-hover:scale-105 shadow-2xs">
+            <Store size={18} />
           </div>
-          <span className="h-3 w-3 rounded-full bg-rose-500" />
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">มีผู้เช่าแล้ว</p>
+            <p className="text-2xl font-black text-slate-900 mt-0.5">{occupiedCount} <span className="text-xs font-semibold text-slate-400">แผง</span></p>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/60 p-3 shadow-2xs flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700 font-extrabold shadow-2xs">
-              <AlertCircle size={18} />
-            </div>
-            <div>
-              <p className="text-xs font-extrabold text-amber-800 uppercase tracking-wide">ปิดปรับปรุง</p>
-              <p className="text-xl font-black text-amber-900 mt-0.5">{repairCount} <span className="text-xs font-bold text-amber-700">แผง</span></p>
-            </div>
+        {/* 4. ปิดปรับปรุง */}
+        <div className="group rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs flex items-center gap-3 hover:border-amber-300 hover:shadow-sm transition-all duration-200">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/80 transition-all duration-200 group-hover:bg-amber-600 group-hover:text-white group-hover:border-amber-600 group-hover:scale-105 shadow-2xs">
+            <AlertCircle size={18} />
           </div>
-          <span className="h-3 w-3 rounded-full bg-amber-500" />
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">ปิดปรับปรุง</p>
+            <p className="text-2xl font-black text-slate-900 mt-0.5">{repairCount} <span className="text-xs font-semibold text-slate-400">แผง</span></p>
+          </div>
         </div>
       </div>
 
@@ -1479,6 +1698,91 @@ export const MarketMapPage: React.FC = () => {
                         </span>
                       </div>
                     </div>
+
+                    {/* Stall Photos */}
+                    {(() => {
+                      const photo1 = selectedStall.image1 || selectedStall.images?.[0] || null;
+                      const photo2 = selectedStall.image2 || selectedStall.images?.[1] || null;
+                      const photoCount = [photo1, photo2].filter(Boolean).length;
+
+                      return (
+                        <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200/80 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <h5 className="font-black text-slate-800 text-xs flex items-center gap-1.5 uppercase tracking-wider">
+                              <Camera size={14} className="text-indigo-500" />
+                              รูปถ่ายแผงค้าจริง
+                            </h5>
+                            {photoCount > 0 && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                {photoCount} รูป
+                              </span>
+                            )}
+                          </div>
+
+                          {photoCount > 0 ? (
+                            <div className={`grid ${photo1 && photo2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 pt-1`}>
+                              {photo1 && (
+                                <div
+                                  onClick={() => setPreviewZoomImage(formatImageUrl(photo1) || null)}
+                                  className="group relative aspect-4/3 rounded-xl overflow-hidden border border-slate-200/90 bg-slate-900 cursor-pointer shadow-xs hover:shadow-md transition-all"
+                                  title="คลิกเพื่อดูภาพขนาดใหญ่"
+                                >
+                                  <img
+                                    src={formatImageUrl(photo1)}
+                                    alt="รูปหน้าแผง"
+                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                  />
+                                  <div className="absolute inset-0 bg-slate-950/0 group-hover:bg-slate-950/40 transition-colors flex items-center justify-center">
+                                    <div className="w-7 h-7 rounded-full bg-white/90 text-slate-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
+                                      <Eye size={14} />
+                                    </div>
+                                  </div>
+                                  <span className="absolute bottom-1 left-1 bg-black/60 backdrop-blur-xs text-[9px] font-bold text-white px-1.5 py-0.5 rounded-md">
+                                    รูปที่ 1 (หน้าแผง)
+                                  </span>
+                                </div>
+                              )}
+                              {photo2 && (
+                                <div
+                                  onClick={() => setPreviewZoomImage(formatImageUrl(photo2) || null)}
+                                  className="group relative aspect-4/3 rounded-xl overflow-hidden border border-slate-200/90 bg-slate-900 cursor-pointer shadow-xs hover:shadow-md transition-all"
+                                  title="คลิกเพื่อดูภาพขนาดใหญ่"
+                                >
+                                  <img
+                                    src={formatImageUrl(photo2)}
+                                    alt="รูปบรรยากาศ"
+                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                  />
+                                  <div className="absolute inset-0 bg-slate-950/0 group-hover:bg-slate-950/40 transition-colors flex items-center justify-center">
+                                    <div className="w-7 h-7 rounded-full bg-white/90 text-slate-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
+                                      <Eye size={14} />
+                                    </div>
+                                  </div>
+                                  <span className="absolute bottom-1 left-1 bg-black/60 backdrop-blur-xs text-[9px] font-bold text-white px-1.5 py-0.5 rounded-md">
+                                    รูปที่ 2 (บรรยากาศ)
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 p-3.5 text-center">
+                              <div className="mx-auto w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-1.5">
+                                <Camera size={16} />
+                              </div>
+                              <p className="text-[11px] font-semibold text-slate-400">ยังไม่มีรูปถ่ายสำหรับแผงนี้</p>
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(selectedStall)}
+                                className="mt-2 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 hover:underline cursor-pointer"
+                              >
+                                <UploadCloud size={12} />
+                                <span>อัปโหลดรูปภาพ</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
 
@@ -1766,6 +2070,117 @@ export const MarketMapPage: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {/* 4. Stall Photos (1 - 2 Photos) */}
+                {editItemType === 'block' && (
+                  <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="font-black text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <Camera size={14} className="text-blue-600" />
+                        4. รูปถ่ายแผงค้าจริง (สำหรับให้ผู้ค้าดูสภาพแผงก่อนตัดสินใจจอง)
+                      </p>
+                      <span className="text-[10px] font-bold text-slate-400">สูงสุด 2 รูป</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {/* Slot 1: Front Photo */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-slate-700">รูปที่ 1 (ภาพด้านหน้าแผง)</label>
+                          {(editImage1Preview || (!removeImage1 && editImage1)) && (
+                            <button
+                              type="button"
+                              onClick={handleRemoveImage1}
+                              className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-0.5 cursor-pointer"
+                            >
+                              <Trash2 size={11} /> ลบรูปนี้
+                            </button>
+                          )}
+                        </div>
+
+                        {editImage1Preview || (!removeImage1 && editImage1) ? (
+                          <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white aspect-video flex items-center justify-center">
+                            <img
+                              src={editImage1Preview || (editImage1 ? formatImageUrl(editImage1) : '')}
+                              alt="Stall Photo 1"
+                              className="w-full h-full object-cover"
+                            />
+                            <label className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer gap-1">
+                              <Camera size={20} />
+                              <span className="text-[11px] font-bold">เปลี่ยนรูป</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImage1Change}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center aspect-video rounded-xl border-2 border-dashed border-slate-300 bg-white hover:bg-blue-50/50 hover:border-blue-400 transition cursor-pointer p-3 text-center">
+                            <UploadCloud size={24} className="text-slate-400 mb-1" />
+                            <span className="text-xs font-bold text-blue-600">คลิกเลือกรูปภาพ</span>
+                            <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG ไม่เกิน 5MB</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleImage1Change}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
+
+                      {/* Slot 2: Environment / Wide Photo */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-slate-700">รูปที่ 2 (ภาพมุมกว้าง / สภาพแวดล้อม)</label>
+                          {(editImage2Preview || (!removeImage2 && editImage2)) && (
+                            <button
+                              type="button"
+                              onClick={handleRemoveImage2}
+                              className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-0.5 cursor-pointer"
+                            >
+                              <Trash2 size={11} /> ลบรูปนี้
+                            </button>
+                          )}
+                        </div>
+
+                        {editImage2Preview || (!removeImage2 && editImage2) ? (
+                          <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white aspect-video flex items-center justify-center">
+                            <img
+                              src={editImage2Preview || (editImage2 ? formatImageUrl(editImage2) : '')}
+                              alt="Stall Photo 2"
+                              className="w-full h-full object-cover"
+                            />
+                            <label className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer gap-1">
+                              <Camera size={20} />
+                              <span className="text-[11px] font-bold">เปลี่ยนรูป</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImage2Change}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center aspect-video rounded-xl border-2 border-dashed border-slate-300 bg-white hover:bg-blue-50/50 hover:border-blue-400 transition cursor-pointer p-3 text-center">
+                            <UploadCloud size={24} className="text-slate-400 mb-1" />
+                            <span className="text-xs font-bold text-blue-600">คลิกเลือกรูปภาพ</span>
+                            <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG ไม่เกิน 5MB</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleImage2Change}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Modal Actions Footer */}
@@ -1778,10 +2193,11 @@ export const MarketMapPage: React.FC = () => {
                 </button>
                 <button
                   onClick={saveStallDetails}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-3 text-sm font-black text-white transition shadow-md shadow-indigo-600/20 cursor-pointer"
+                  disabled={isSavingStallImages}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 py-3 text-sm font-black text-white transition shadow-md shadow-indigo-600/20 cursor-pointer"
                 >
                   <Check size={16} />
-                  <span>บันทึกการแก้ไข</span>
+                  <span>{isSavingStallImages ? 'กำลังบันทึกและอัปโหลดรูป...' : 'บันทึกการแก้ไข'}</span>
                 </button>
               </div>
             </div>
@@ -1793,8 +2209,8 @@ export const MarketMapPage: React.FC = () => {
       {showCreateModal &&
         createPortal(
           <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
-            <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-              <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
+            <div className="w-full max-w-xl max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-slate-900 p-5 text-white flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{getItemTypeIcon(createItemType)}</span>
                   <div>
@@ -1802,12 +2218,16 @@ export const MarketMapPage: React.FC = () => {
                     <p className="text-xs text-slate-400 font-medium">เพิ่มองค์ประกอบใหม่ลงบนแผนผังตลาด</p>
                   </div>
                 </div>
-                <button onClick={() => setShowCreateModal(false)} className="rounded-full p-2 text-slate-400 hover:text-white transition">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="rounded-full p-2 text-slate-400 hover:text-white transition cursor-pointer"
+                >
                   <X size={20} />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4 text-xs">
+              <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
                 <div>
                   <label className="font-bold text-slate-700">ชื่อเรียก / รหัสระบุวัตถุ</label>
                   <input
@@ -1962,16 +2382,142 @@ export const MarketMapPage: React.FC = () => {
                         </label>
                       </div>
                     </div>
+
+                    {/* 4. Stall Photos (1 - 2 Photos) */}
+                    <div className="pt-2 border-t border-indigo-100 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-700 flex items-center gap-1.5">
+                          <Camera size={14} className="text-blue-600" />
+                          รูปถ่ายแผงค้าจริง (สำหรับให้ผู้ค้าดูสภาพแผงก่อนตัดสินใจจอง)
+                        </label>
+                        <span className="text-[10px] font-bold text-slate-400">สูงสุด 2 รูป</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {/* Slot 1: Front Photo */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-slate-700">รูปที่ 1 (ภาพด้านหน้าแผง)</label>
+                            {createImage1Preview && (
+                              <button
+                                type="button"
+                                onClick={handleRemoveCreateImage1}
+                                className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-0.5 cursor-pointer"
+                              >
+                                <Trash2 size={11} /> ลบรูปนี้
+                              </button>
+                            )}
+                          </div>
+
+                          {createImage1Preview ? (
+                            <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white aspect-video flex items-center justify-center">
+                              <img
+                                src={createImage1Preview}
+                                alt="New Stall Photo 1"
+                                className="w-full h-full object-cover"
+                              />
+                              <label className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer gap-1">
+                                <Camera size={20} />
+                                <span className="text-[11px] font-bold">เปลี่ยนรูป</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleCreateImage1Change}
+                                  className="hidden"
+                                />
+                              </label>
+                            </div>
+                          ) : (
+                            <label className="flex flex-col items-center justify-center aspect-video rounded-xl border-2 border-dashed border-slate-300 bg-white hover:bg-blue-50/50 hover:border-blue-400 transition cursor-pointer p-3 text-center">
+                              <UploadCloud size={24} className="text-slate-400 mb-1" />
+                              <span className="text-xs font-bold text-blue-600">คลิกเลือกรูปภาพ</span>
+                              <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG ไม่เกิน 5MB</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleCreateImage1Change}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+                        </div>
+
+                        {/* Slot 2: Wide / Environment Photo */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-slate-700">รูปที่ 2 (ภาพมุมกว้าง / สภาพแวดล้อม)</label>
+                            {createImage2Preview && (
+                              <button
+                                type="button"
+                                onClick={handleRemoveCreateImage2}
+                                className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-0.5 cursor-pointer"
+                              >
+                                <Trash2 size={11} /> ลบรูปนี้
+                              </button>
+                            )}
+                          </div>
+
+                          {createImage2Preview ? (
+                            <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white aspect-video flex items-center justify-center">
+                              <img
+                                src={createImage2Preview}
+                                alt="New Stall Photo 2"
+                                className="w-full h-full object-cover"
+                              />
+                              <label className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer gap-1">
+                                <Camera size={20} />
+                                <span className="text-[11px] font-bold">เปลี่ยนรูป</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleCreateImage2Change}
+                                  className="hidden"
+                                />
+                              </label>
+                            </div>
+                          ) : (
+                            <label className="flex flex-col items-center justify-center aspect-video rounded-xl border-2 border-dashed border-slate-300 bg-white hover:bg-blue-50/50 hover:border-blue-400 transition cursor-pointer p-3 text-center">
+                              <UploadCloud size={24} className="text-slate-400 mb-1" />
+                              <span className="text-xs font-bold text-blue-600">คลิกเลือกรูปภาพ</span>
+                              <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG ไม่เกิน 5MB</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleCreateImage2Change}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
 
-              <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-                <button onClick={() => setShowCreateModal(false)} className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700">
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
+                <button
+                  type="button"
+                  disabled={isCreatingStall}
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+                >
                   ยกเลิก
                 </button>
-                <button onClick={handleCreateStall} className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-3 text-sm font-black text-white shadow-md cursor-pointer">
-                  สร้างวัตถุ
+                <button
+                  type="button"
+                  disabled={isCreatingStall}
+                  onClick={handleCreateStall}
+                  className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-3 text-sm font-black text-white shadow-md cursor-pointer transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isCreatingStall ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      กำลังสร้างและอัปโหลดรูปภาพ...
+                    </>
+                  ) : (
+                    'สร้างวัตถุ'
+                  )}
                 </button>
               </div>
             </div>
@@ -2019,6 +2565,35 @@ export const MarketMapPage: React.FC = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ── Image Lightbox Modal ── */}
+      {previewZoomImage &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-md animate-in fade-in duration-200 cursor-pointer"
+            onClick={() => setPreviewZoomImage(null)}
+          >
+            <div
+              className="relative max-w-4xl max-h-[90vh] flex flex-col items-center cursor-default"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setPreviewZoomImage(null)}
+                className="absolute -top-12 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-sm transition-all cursor-pointer"
+                title="ปิด"
+              >
+                <X size={20} />
+              </button>
+              <img
+                src={previewZoomImage}
+                alt="รูปขยาย"
+                className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl border border-white/10"
+              />
             </div>
           </div>,
           document.body
