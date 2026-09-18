@@ -3,6 +3,16 @@
  * across the entire Marketplace administration system.
  */
 
+const parseToLocalDate = (value: string | number | Date): Date => {
+  if (value instanceof Date) return value;
+  if (typeof value === 'number') return new Date(value);
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    const [y, m, d] = value.trim().split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date(value);
+};
+
 /**
  * Format a date into standardized short Thai date: "25 ส.ค. 2569"
  */
@@ -11,7 +21,7 @@ export const formatThaiDate = (
   fallback = '-'
 ): string => {
   if (!value) return fallback;
-  const date = typeof value === 'string' || typeof value === 'number' ? new Date(value) : value;
+  const date = parseToLocalDate(value);
   if (Number.isNaN(date.getTime())) return typeof value === 'string' ? value : fallback;
 
   return date.toLocaleDateString('th-TH', {

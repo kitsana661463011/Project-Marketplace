@@ -876,7 +876,7 @@ export const Dashboard: React.FC = () => {
             <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
               <Building2 className="h-3.5 w-3.5 text-blue-500" />
               <span>
-                จองแล้ว {summary.occupied_stalls ?? 0} แผง / ว่าง {summary.available_stalls ?? ((summary.total_stalls ?? 0) - (summary.occupied_stalls ?? 0))} แผง
+                มีผู้เช่า {summary.occupied_stalls ?? 0} แผง / ว่าง {summary.available_stalls ?? ((summary.total_stalls ?? 0) - (summary.occupied_stalls ?? 0))} แผง
               </span>
             </div>
           </div>
@@ -937,7 +937,7 @@ export const Dashboard: React.FC = () => {
                     {zones.length} โซน
                   </span>
                 </div>
-                <p className="mt-1 text-xs font-semibold text-slate-600">สถานะแผงค้าว่างและแผงจองแบ่งตามโซน</p>
+                <p className="mt-1 text-xs font-semibold text-slate-600">สถานะแผงค้าว่างและแผงมีผู้เช่าแบ่งตามโซน</p>
               </div>
               <button
                 type="button"
@@ -971,10 +971,10 @@ export const Dashboard: React.FC = () => {
                       </span>
                     </div>
 
-                    {/* Stats Grid: จองแล้ว vs ว่าง */}
+                    {/* Stats Grid: มีผู้เช่า vs ว่าง */}
                     <div className="grid grid-cols-2 gap-2 mb-2.5">
                       <div className="rounded-xl bg-slate-100/80 p-2 border border-slate-200/60 flex items-center justify-between">
-                        <span className="text-xs font-medium text-slate-600">จองแล้ว:</span>
+                        <span className="text-xs font-medium text-slate-600">มีผู้เช่า:</span>
                         <span className="font-extrabold text-sm text-blue-600">{zone.occupied_count} แผง</span>
                       </div>
                       <div className="rounded-xl bg-slate-100/80 p-2 border border-slate-200/60 flex items-center justify-between">
@@ -1197,7 +1197,7 @@ export const Dashboard: React.FC = () => {
                     <div className="min-w-0 pr-2 flex items-center gap-2">
                       {index === 0 && <span className="text-sm shrink-0">🔥</span>}
                       <span className="font-extrabold text-sm text-slate-900 truncate">{interest.name}</span>
-                      <span className="text-xs font-bold text-slate-600 shrink-0">({interest.count} คนเลือก)</span>
+                      <span className="text-xs font-bold text-slate-500 shrink-0">({interest.count} คน)</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-extrabold text-slate-700 shadow-2xs border border-slate-200 shrink-0">
@@ -1243,8 +1243,7 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
 
-          <div className="shrink-0 pt-3 mt-1 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600">
-            <span>ผู้เลือก {summary.total_users_with_interests ?? 0} คน</span>
+          <div className="shrink-0 pt-3 mt-1 border-t border-slate-100 flex items-center justify-end text-xs font-bold text-slate-600">
             <button
               type="button"
               onClick={() => setIsViewAllInterestsOpen(true)}

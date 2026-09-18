@@ -13,8 +13,8 @@ import type {
 
 export const mockUser: User = {
   id: '1',
-  name: 'Admin User',
-  email: 'admin@marketplace.com',
+  name: 'Admin',
+  email: 'Admin@gmail.com',
   role: 'Administrator',
   avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
 };
@@ -276,6 +276,16 @@ export const mockSellers: Seller[] = [
   {
     id: '1',
     name: 'วิชัย นิธิพัฒน์',
+    shop_name: 'วิชัย สกินแคร์',
+    category_name: 'สุขภาพและความงาม',
+    shops: [
+      {
+        id: '101',
+        shop_name: 'วิชัย สกินแคร์',
+        category_name: 'สุขภาพและความงาม',
+        stalls: ['A3'],
+      },
+    ],
     phone: '089-876-5432',
     email: 'vichai@marketplace.com',
     citizen_id: '3-xxxx-xxxx-45-6',
@@ -287,10 +297,26 @@ export const mockSellers: Seller[] = [
   {
     id: '2',
     name: 'นายสมนาย โสด',
+    shop_name: 'โสด สตรีทฟู้ด',
+    category_name: 'อาหารและเครื่องดื่ม',
+    shops: [
+      {
+        id: '201',
+        shop_name: 'โสด สตรีทฟู้ด',
+        category_name: 'อาหารและเครื่องดื่ม',
+        stalls: ['A10', 'A3'],
+      },
+      {
+        id: '202',
+        shop_name: 'โสด คาเฟ่ & เบเกอรี่',
+        category_name: 'ของหวานและเบเกอรี่',
+        stalls: ['B05'],
+      },
+    ],
     phone: '089-555-4433',
     email: 'somnai@marketplace.com',
     citizen_id: '1-xxxx-xxxx-88-8',
-    current_stalls: ['A10', 'A3'],
+    current_stalls: ['A10', 'A3', 'B05'],
     created_at: '10 เม.ย. 2563',
     status: 'active',
     avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
@@ -298,6 +324,16 @@ export const mockSellers: Seller[] = [
   {
     id: '3',
     name: 'นำใจ ดิ',
+    shop_name: 'น้ำใจ คราฟท์แอนด์แฮนด์เมด',
+    category_name: 'สินค้าแฮนด์เมด',
+    shops: [
+      {
+        id: '301',
+        shop_name: 'น้ำใจ คราฟท์แอนด์แฮนด์เมด',
+        category_name: 'สินค้าแฮนด์เมด',
+        stalls: ['C8'],
+      },
+    ],
     phone: '082-111-2222',
     email: 'namjai@marketplace.com',
     citizen_id: '5-xxxx-xxxx-09-1',
@@ -309,6 +345,16 @@ export const mockSellers: Seller[] = [
   {
     id: '4',
     name: 'อนันต์ชัย ยี่ซิ่น',
+    shop_name: 'อนันต์ชัย รองเท้าแฟชั่น',
+    category_name: 'แฟชั่นและเครื่องแต่งกาย',
+    shops: [
+      {
+        id: '401',
+        shop_name: 'อนันต์ชัย รองเท้าแฟชั่น',
+        category_name: 'แฟชั่นและเครื่องแต่งกาย',
+        stalls: ['C1'],
+      },
+    ],
     phone: '084-333-4444',
     email: 'anantt@marketplace.com',
     citizen_id: '3-xxxx-xxxx-33-3',
@@ -416,7 +462,7 @@ export const mockIssueReports: IssueReport[] = [
     id: '4',
     type: 'feedback',
     zone: 'B4',
-    description: 'ผู้ขายรายงานว่าความสะดวกในการเข้าถึงพื้นที่ยังไม่เพียงพอ',
+    description: 'ผู้ค้ารายงานว่าความสะดวกในการเข้าถึงพื้นที่ยังไม่เพียงพอ',
     date: '11 เด.ค. 2566',
     time: '09:00 น.',
     status: 'resolved',
@@ -438,7 +484,7 @@ export const mockAnnouncements: Announcement[] = [
   {
     id: '2',
     title: 'กิจกรรมพิเศษวันแห่งความสุขของตลาด',
-    description: 'ร่วมกิจกรรมรับชมคอนเสิร์ตและโปรโมชั่นพิเศษสำหรับผู้ขายและลูกค้าทุกท่านในช่วงปลายเดือน',
+    description: 'ร่วมกิจกรรมรับชมคอนเสิร์ตและโปรโมชั่นพิเศษสำหรับผู้ค้าและลูกค้าทุกท่านในช่วงปลายเดือน',
     image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&h=600&q=80',
     date: '15 ก.พ. 2569',
     status: 'active',

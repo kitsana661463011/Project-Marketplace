@@ -53,7 +53,7 @@ const OrdersPage: React.FC = () => {
           <Search className="absolute left-3 top-3 text-gray-400" size={20} />
           <input
             type="text"
-            placeholder="ค้นหารหัสสั่งซื้อหรือชื่อผู้ขาย..."
+            placeholder="ค้นหารหัสคำสั่งซื้อหรือชื่อผู้ค้า..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -75,13 +75,13 @@ const OrdersPage: React.FC = () => {
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">รหัสสั่งซื้อ</th>
-                <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">ผู้ขาย</th>
+                <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">รหัสคำสั่งซื้อ</th>
+                <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">ผู้ค้า</th>
                 <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">โซน</th>
                 <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">วันที่</th>
                 <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">จำนวนเงิน</th>
                 <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">สถานะ</th>
-                <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">การกระทำ</th>
+                <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">จัดการ</th>
               </tr>
             </thead>
             <tbody>

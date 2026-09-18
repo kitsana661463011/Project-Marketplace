@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { formatImageUrl } from '../../utils/imageUtils';
 import {
   LogOut,
@@ -32,14 +32,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeItemId,
   onNavigate,
   userAvatar,
-  userName = 'Admin User',
+  userName = 'Admin',
   userRole = 'Administrator',
   onLogout,
 }) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const currentPath = location.pathname;
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [userAvatar]);
 
   const iconMap: Record<string, React.ElementType> = {
     LayoutDashboard,
@@ -131,27 +137,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* ── User Profile ── */}
       <div className="relative border-t border-slate-100 bg-slate-50/50 p-4">
         <div className="flex items-center gap-3">
-
-          {userAvatar ? (
-            <img
-              src={formatImageUrl(userAvatar)}
-              alt={userName}
-              className="h-10 w-10 flex-shrink-0 rounded-full border-2 border-white object-cover shadow-sm"
-            />
-          ) : (
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-sm">
-              <span className="text-sm font-bold text-white">
-                {userName.charAt(0)}
-              </span>
+          <div
+            onClick={() => {
+              navigate('/settings');
+              setIsMobileOpen(false);
+            }}
+            className="cursor-pointer group flex items-center gap-3 flex-1 min-w-0"
+            title="คลิกเพื่อไปที่หน้าตั้งค่าโปรไฟล์"
+          >
+            {userAvatar && !avatarError ? (
+              <img
+                src={formatImageUrl(userAvatar)}
+                alt={userName}
+                onError={() => setAvatarError(true)}
+                className="h-10 w-10 flex-shrink-0 rounded-full border-2 border-white object-cover shadow-sm bg-white"
+              />
+            ) : (
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-sm text-white font-black text-sm">
+                {userName ? userName.charAt(0).toUpperCase() : 'A'}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">{userName}</p>
+              <p className="truncate text-xs text-slate-500">{userRole}</p>
             </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-slate-900">{userName}</p>
-            <p className="truncate text-xs text-slate-400">{userRole}</p>
           </div>
           <button
             onClick={() => setIsUserMenuOpen((open) => !open)}
-            className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-slate-600 hover:shadow-sm"
+            className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-slate-600 hover:shadow-sm cursor-pointer"
             aria-label="เมนูผู้ใช้"
             aria-expanded={isUserMenuOpen}
           >
@@ -162,15 +175,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {isUserMenuOpen && (
           <div className="absolute bottom-full left-4 right-4 mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50">
             <button
-              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+              onClick={() => {
+                setIsUserMenuOpen(false);
+                setIsMobileOpen(false);
+                navigate('/settings');
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 cursor-pointer"
               aria-label="ตั้งค่า"
             >
-              <Settings className="h-4 w-4" />
+              <Settings className="h-4 w-4 text-slate-500" />
               ตั้งค่า
             </button>
             <button
-              onClick={onLogout}
-              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+              onClick={() => {
+                setIsUserMenuOpen(false);
+                if (onLogout) onLogout();
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 cursor-pointer"
               aria-label="ออกจากระบบ"
             >
               <LogOut className="h-4 w-4" />

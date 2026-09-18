@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Trash2, ZoomIn, ZoomOut, Maximize2, Move, Hand, X, Check, Save, Lock, Unlock, Eye, Grid, RefreshCw, Folder, AlertCircle, HelpCircle, Store, Edit3, User, DollarSign, ChevronDown, CreditCard, Zap, Droplets, Camera, UploadCloud
 } from 'lucide-react';
@@ -48,6 +49,10 @@ export interface ExtendedMarketZone {
 }
 
 export const MarketMapPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const queryStall = searchParams.get('stall') || searchParams.get('code') || searchParams.get('stall_id');
+  const querySeller = searchParams.get('seller') || searchParams.get('seller_id') || searchParams.get('user_id');
+
   // Map Items state
   const [stalls, setStalls] = useState<ExtendedMarketZone[]>([]);
   const [dbZones, setDbZones] = useState<{ zone_id: number; zone_name: string; zone_price: number }[]>([]);
@@ -267,6 +272,44 @@ export const MarketMapPage: React.FC = () => {
   useEffect(() => {
     loadMapData();
   }, []);
+
+  // Auto-focus, select, and center stall from URL query parameter (?stall=A-01 or ?seller_id=12)
+  useEffect(() => {
+    if (!stalls.length || (!queryStall && !querySeller)) return;
+
+    const target = stalls.find((s) => {
+      if (queryStall) {
+        const cleanQuery = queryStall.trim().toLowerCase();
+        const codeMatch = s.code && s.code.trim().toLowerCase() === cleanQuery;
+        const stallIdMatch = s.stall_id && String(s.stall_id) === cleanQuery;
+        const idMatch = s.id && String(s.id).toLowerCase() === cleanQuery;
+        if (codeMatch || stallIdMatch || idMatch) return true;
+      }
+      if (querySeller) {
+        const cleanSeller = querySeller.trim().toLowerCase();
+        const sellerIdMatch = s.seller?.id && String(s.seller.id).toLowerCase() === cleanSeller;
+        const sellerNameMatch = s.seller?.name && s.seller.name.trim().toLowerCase().includes(cleanSeller);
+        if (sellerIdMatch || sellerNameMatch) return true;
+      }
+      return false;
+    });
+
+    if (target) {
+      setSelectedStallId(target.id);
+      setIsSidebarOpen(true);
+
+      // Smoothly pan & center viewport to target stall
+      const container = canvasContainerRef.current;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const currentZoom = zoom || 1;
+        setPanOffset({
+          x: Math.round(-(target.x * currentZoom) + (rect.width / 2) - (target.width * currentZoom / 2)),
+          y: Math.round(-(target.y * currentZoom) + (rect.height / 2) - (target.height * currentZoom / 2)),
+        });
+      }
+    }
+  }, [stalls, queryStall, querySeller]);
 
   // Keyboard Arrow Keys & Spacebar Listener
   useEffect(() => {

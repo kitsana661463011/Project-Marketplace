@@ -115,9 +115,19 @@ export interface Order {
 }
 
 // ===== Sellers Types =====
+export interface SellerShop {
+  id?: string | number;
+  shop_name: string;
+  category_name?: string;
+  stalls?: string[];
+}
+
 export interface Seller {
   id: string | number;
   name: string;
+  shop_name?: string;
+  category_name?: string;
+  shops?: SellerShop[];
   phone: string;
   email: string;
   citizen_id?: string;
@@ -128,6 +138,7 @@ export interface Seller {
   document_status?: 'pending' | 'approved' | 'rejected' | 'request_more' | string;
   document_image?: string | null;
   document_url?: string | null;
+  reject_reason?: string | null;
   avatar?: string;
 }
 
@@ -142,6 +153,7 @@ export interface NewSellerApplication {
   document_status?: 'pending' | 'approved' | 'rejected' | 'request_more' | string;
   document_image?: string | null;
   document_url?: string | null;
+  reject_reason?: string | null;
   status?: string;
   avatar?: string;
 }
@@ -189,7 +201,10 @@ export interface IssueReport {
     report_status?: string;
     shop_name: string;
     shop_id?: number;
+    reviewer_id?: number;
     reviewer_name: string;
+    reviewer_status?: string;
+    strike_count?: number;
     rating: number;
     comment: string;
     review_status?: string;
@@ -209,6 +224,11 @@ export interface Announcement {
   image?: string;
   date: string;
   rawDate?: string | null;
+  endDate?: string | null;
+  rawEndDate?: string | null;
+  isActive?: boolean;
+  isExpired?: boolean;
+  isScheduled?: boolean;
   status: 'active' | 'inactive' | 'draft';
   category?: 'urgent' | 'event' | 'general' | 'news' | 'promotion' | 'update' | 'maintenance';
 }

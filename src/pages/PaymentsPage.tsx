@@ -214,6 +214,15 @@ const PaymentsPage: React.FC = () => {
     }
 
     list.sort((a, b) => {
+      const typeA = a.booking?.rental_type || a.booking?.stall?.rental_type || 'daily';
+      const typeB = b.booking?.rental_type || b.booking?.stall?.rental_type || 'daily';
+
+      // จัดเรียง 'เช่ารายเดือน' (monthly) ขึ้นมาก่อน 'เช่ารายวัน' (daily)
+      if (typeA !== typeB) {
+        if (typeA === 'monthly') return -1;
+        if (typeB === 'monthly') return 1;
+      }
+
       const dateA = a.payment_date ? new Date(a.payment_date).getTime() : 0;
       const dateB = b.payment_date ? new Date(b.payment_date).getTime() : 0;
       return dateB - dateA;
@@ -1054,9 +1063,6 @@ const PaymentsPage: React.FC = () => {
             <p className="text-3xl font-black text-slate-900 tracking-tight">{summaryStats.total}</p>
             <span className="text-xs font-extrabold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-md">รายการทั้งหมด</span>
           </div>
-          <p className="mt-2 text-[11px] font-semibold text-slate-500">
-            รวมรายการเงินเข้าตลาดและยอดโอนคืนผู้ค้าทั้งหมด
-          </p>
         </div>
 
         {/* 2. Refunded */}
@@ -1077,9 +1083,6 @@ const PaymentsPage: React.FC = () => {
             <p className="text-3xl font-black text-sky-700 tracking-tight">{summaryStats.refunded}</p>
             <span className="text-xs font-extrabold text-sky-800 bg-sky-50 px-2.5 py-1 rounded-md">โอนคืนเรียบร้อย</span>
           </div>
-          <p className="mt-2 text-[11px] font-semibold text-sky-700">
-            แอดมินโอนเงินคืนเข้าบัญชีผู้ค้าแล้ว มีสลิปยืนยันในระบบ
-          </p>
         </div>
 
         {/* 3. Verified Success */}
@@ -1091,7 +1094,7 @@ const PaymentsPage: React.FC = () => {
             }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-emerald-900 uppercase tracking-wider">สำเร็จ (Verified)</span>
+            <span className="text-xs font-black text-emerald-900 uppercase tracking-wider">ชำระเงินสำเร็จ (Verified)</span>
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
               <CheckCircle2 className="h-5 w-5" />
             </div>
@@ -1100,9 +1103,6 @@ const PaymentsPage: React.FC = () => {
             <p className="text-3xl font-black text-emerald-700 tracking-tight">{summaryStats.verified}</p>
             <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">เงินเข้าตลาดแล้ว</span>
           </div>
-          <p className="mt-2 text-[11px] font-semibold text-emerald-700">
-            ตรวจสลิปถูกต้อง ได้รับเงินแล้ว อนุมัติสิทธิ์เข้าใช้แผงค้า
-          </p>
         </div>
       </div>
 
@@ -1206,7 +1206,7 @@ const PaymentsPage: React.FC = () => {
               <tr className="border-b border-slate-100 bg-slate-50/60 text-xs font-black uppercase tracking-wider text-slate-500">
                 <th className="px-6 py-4">วันที่ / เวลา</th>
                 <th className="px-6 py-4">ผู้ค้า / แผงค้า</th>
-                <th className="px-6 py-4">ชำระเงินค่าอะไรบ้าง (รายการค่าใช้จ่าย)</th>
+                <th className="px-6 py-4">รายละเอียด</th>
                 <th className="px-6 py-4">ธนาคารปลายทาง</th>
                 <th className="px-6 py-4">ยอดเงินรวม</th>
                 <th className="px-6 py-4">สถานะ</th>

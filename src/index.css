@@ -5,25 +5,25 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 0 0% 0%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 0 0% 0%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 0 0% 0%;
 
     --primary: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary-foreground: 0 0% 0%;
 
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted-foreground: 0 0% 0%;
 
     --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent-foreground: 0 0% 0%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
@@ -74,10 +74,15 @@
   }
   html {
     font-family: var(--font-thai);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-thai);
+    color: #000000;
   }
 }
 
@@ -107,6 +112,72 @@
   }
   .card-hover:hover {
     @apply -translate-y-1 shadow-xl shadow-slate-200/60;
+  }
+
+  /* ============================================================
+     Typography & High-Contrast Overrides
+     - ปรับขนาดตัวหนังสือให้อ่านง่ายขึ้น ไม่เล็กเกินไปสำหรับภาษาไทย
+     - ปรับสีเทา (slate, gray, zinc, neutral, muted) เปลี่ยนเป็นสีดำ #000000 ทั้งหมด
+     ============================================================ */
+
+  /* Force all gray text colors to sharp solid black */
+  .text-slate-400,
+  .text-slate-500,
+  .text-slate-600,
+  .text-slate-700,
+  .text-gray-400,
+  .text-gray-500,
+  .text-gray-600,
+  .text-gray-700,
+  .text-zinc-400,
+  .text-zinc-500,
+  .text-zinc-600,
+  .text-zinc-700,
+  .text-neutral-400,
+  .text-neutral-500,
+  .text-neutral-600,
+  .text-neutral-700,
+  .text-muted-foreground {
+    color: #000000;
+  }
+
+  /* Micro text classes (10px, 11px) enlarged to readable size (~13px) */
+  .text-\[10px\],
+  .text-\[11px\] {
+    font-size: 0.825rem !important;
+    line-height: 1.2rem !important;
+  }
+
+  /* Gray SVG icons turn solid black on light surfaces */
+  svg.text-slate-400,
+  svg.text-slate-500,
+  svg.text-gray-400,
+  svg.text-gray-500 {
+    color: #000000;
+  }
+
+  /* Retain light contrast when elements are inside dark containers/headers */
+  .bg-slate-900 .text-slate-400,
+  .bg-slate-900 .text-slate-300,
+  .bg-slate-900 svg.text-slate-400,
+  .bg-slate-800 .text-slate-400,
+  .bg-slate-800 .text-slate-300,
+  .bg-slate-800 svg.text-slate-400,
+  .bg-slate-700 .text-slate-400,
+  .bg-gray-900 .text-gray-400,
+  .bg-black .text-slate-400,
+  .bg-black .text-gray-400,
+  .dark .text-slate-400,
+  .dark .text-slate-500,
+  .dark .text-gray-400,
+  .dark .text-gray-500 {
+    color: #cbd5e1;
+  }
+
+  /* Input placeholder text readability */
+  ::placeholder {
+    color: #1e293b !important;
+    opacity: 0.85 !important;
   }
 }
 

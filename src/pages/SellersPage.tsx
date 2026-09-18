@@ -20,8 +20,9 @@ import {
   Store,
   Filter,
   Calendar,
+  AlertTriangle,
+  Send,
 } from 'lucide-react';
-import { mockSellers, mockNewSellerApplications } from '../data/mockData';
 import { ActionButton } from '../components/common';
 import type { Seller, NewSellerApplication } from '../types';
 import { formatImageUrl } from '../utils/imageUtils';
@@ -45,16 +46,33 @@ const formatDate = (dateString: string | null | undefined) => {
   return formatThaiDateTime(dateString, 'ไม่ระบุวันที่');
 };
 
+const PRESET_REJECTION_REASONS = [
+  'ภาพถ่ายบัตรประชาชนไม่ชัดเจน ไม่สามารถอ่านข้อมูลหรือตัวเลขได้',
+  'ข้อมูลชื่อ-นามสกุล หรือเลขบัตรประชาชนไม่ตรงกับภาพถ่าย',
+  'ภาพถ่ายไม่ใช่บัตรประจำตัวประชาชน หรือเอกสารหมดอายุ',
+  'ข้อมูลที่อยู่หรือช่องทางการติดต่อไม่ครบถ้วนถูกต้อง',
+];
+
 const SellersPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('applications');
-  const [sellers, setSellers] = useState<Seller[]>(mockSellers);
-  const [applications, setApplications] = useState<NewSellerApplication[]>(mockNewSellerApplications);
-  const [isLoadingSellers, setIsLoadingSellers] = useState(false);
-  const [isLoadingApplications, setIsLoadingApplications] = useState(false);
+  const [sellers, setSellers] = useState<Seller[]>([]);
+  const [applications, setApplications] = useState<NewSellerApplication[]>([]);
+  const [isLoadingSellers, setIsLoadingSellers] = useState(true);
+  const [isLoadingApplications, setIsLoadingApplications] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [applicationSearch, setApplicationSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [selectedApplication, setSelectedApplication] = useState<NewSellerApplication | null>(null);
+  const [inputCitizenId, setInputCitizenId] = useState('');
+  const [inputAddress, setInputAddress] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+  // Rejection modal state
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectingAppId, setRejectingAppId] = useState<string | null>(null);
+  const [rejectingAppName, setRejectingAppName] = useState('');
+  const [rejectReason, setRejectReason] = useState('');
+
   const [selectedSeller, setSelectedSeller] = useState<Seller | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [openStallsSellerId, setOpenStallsSellerId] = useState<string | null>(null);
@@ -120,7 +138,7 @@ const SellersPage: React.FC = () => {
         setSellers(mappedSellers);
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
-          setSellers(mockSellers);
+          setSellers([]);
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -171,12 +189,13 @@ const SellersPage: React.FC = () => {
           status: item.document_status === 'approved' ? 'approved' : item.document_status === 'rejected' ? 'rejected' : 'pending',
           document_url: formatImageUrl(item.document_url) ?? null,
           document_image: formatImageUrl(item.document_image) ?? null,
+          reject_reason: item.reject_reason ?? null,
         }));
 
         setApplications(mappedApplications);
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
-          setApplications(mockNewSellerApplications);
+          setApplications([]);
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -229,37 +248,128 @@ const SellersPage: React.FC = () => {
     return { totalSellers, activeSellers, pendingApps, totalStalls };
   }, [sellers, applications]);
 
-  const handleReview = async (id: string, status: 'approved' | 'rejected') => {
-    try {
-      const endpoint = status === 'approved' ? `/api/v1/admin/sellers/${id}/approve` : `/api/v1/admin/sellers/${id}/reject`;
-      const body = status === 'approved'
-        ? {
-            citizen_id: (selectedApplication?.citizen_id || '').replace(/\D/g, ''),
-            address: selectedApplication?.address ?? '',
-          }
-        : undefined;
+  const openApplicationReview = (app: NewSellerApplication) => {
+    setSelectedApplication(app);
+    setInputCitizenId(app.citizen_id === '-' ? '' : (app.citizen_id || ''));
+    setInputAddress(app.address === '-' ? '' : (app.address || ''));
+  };
 
-      const response = await fetch(endpoint, {
+  const handleApprove = async () => {
+    if (!selectedApplication) return;
+    const id = String(selectedApplication.id);
+    setIsSubmittingReview(true);
+    try {
+      const cleanCitizenId = inputCitizenId.replace(/\D/g, '');
+      const body: { citizen_id?: string; address?: string } = {};
+      if (cleanCitizenId) {
+        body.citizen_id = cleanCitizenId;
+      }
+      if (inputAddress.trim() && inputAddress !== '-') {
+        body.address = inputAddress.trim();
+      }
+
+      const response = await fetch(`/api/v1/admin/sellers/${id}/approve`, {
         method: 'PUT',
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
         },
-        body: body ? JSON.stringify(body) : undefined,
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}));
-        const errMsg = errPayload?.message || errPayload?.errors?.citizen_id?.[0] || 'ไม่สามารถอัปเดตข้อมูลผู้ค้าได้';
+        const errMsg = errPayload?.message || errPayload?.errors?.citizen_id?.[0] || 'ไม่สามารถอนุมัติผู้ค้าได้';
         throw new Error(errMsg);
       }
 
-      setApplications((current) => current.map((item) => (item.id === id ? { ...item, status } : item)));
-      setSellers((current) => current.map((seller) => (seller.id === id ? { ...seller, status: status === 'approved' ? 'active' : 'inactive' } : seller)));
+      const resJson = await response.json();
+      const updatedUser = resJson.data;
+
+      setApplications((current) => current.filter((item) => item.id !== id));
+
+      setSellers((current) => {
+        const exists = current.some((s) => s.id === id);
+        if (exists) {
+          return current.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  status: 'active',
+                  citizen_id: updatedUser?.citizen_id || s.citizen_id,
+                  address: updatedUser?.address || s.address,
+                }
+              : s
+          );
+        }
+        return [
+          {
+            id,
+            name: selectedApplication.name,
+            phone: selectedApplication.phone,
+            email: selectedApplication.email || '-',
+            citizen_id: updatedUser?.citizen_id || selectedApplication.citizen_id,
+            address: updatedUser?.address || selectedApplication.address,
+            current_stalls: [],
+            status: 'active',
+            avatar: selectedApplication.avatar || buildAvatarUrl(selectedApplication.name),
+            document_url: selectedApplication.document_url,
+            document_image: selectedApplication.document_image,
+          },
+          ...current,
+        ];
+      });
+
       setSelectedApplication(null);
       window.dispatchEvent(new Event('refresh-badges'));
+      alert('อนุมัติการเป็นผู้ค้าเรียบร้อยแล้ว');
     } catch (err: any) {
-      alert(err.message || 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
+      alert(err.message || 'เกิดข้อผิดพลาดในการอนุมัติ');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const handleOpenRejectModal = () => {
+    if (!selectedApplication) return;
+    setRejectingAppId(String(selectedApplication.id));
+    setRejectingAppName(selectedApplication.name);
+    setRejectReason(selectedApplication.reject_reason || '');
+    setRejectModalOpen(true);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectingAppId) return;
+    const id = rejectingAppId;
+    const finalReason = rejectReason.trim() || 'เอกสารหรือข้อมูลไม่ผ่านเกณฑ์การตรวจสอบ';
+
+    setIsSubmittingReview(true);
+    try {
+      const response = await fetch(`/api/v1/admin/sellers/${id}/reject`, {
+        method: 'PUT',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reject_reason: finalReason }),
+      });
+
+      if (!response.ok) {
+        const errPayload = await response.json().catch(() => ({}));
+        throw new Error(errPayload?.message || 'ไม่สามารถปฏิเสธคำขอได้');
+      }
+
+      setApplications((current) => current.filter((item) => item.id !== id));
+
+      setRejectModalOpen(false);
+      setRejectingAppId(null);
+      setSelectedApplication(null);
+      window.dispatchEvent(new Event('refresh-badges'));
+      alert('ปฏิเสธคำขอเรียบร้อยแล้ว ระบบได้ส่งข้อความแจ้งเตือนไปยังผู้สมัครแล้ว');
+    } catch (err: any) {
+      alert(err.message || 'เกิดข้อผิดพลาดในการปฏิเสธคำขอ');
+    } finally {
+      setIsSubmittingReview(false);
     }
   };
 
@@ -639,13 +749,16 @@ const SellersPage: React.FC = () => {
                         )}
                       </td>
                       <td className="px-5 py-4">
-                        <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold border ${
-                          app.status === 'pending'
-                            ? 'bg-amber-50 text-amber-700 border-amber-200'
-                            : app.status === 'approved'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-rose-50 text-rose-700 border-rose-200'
-                        }`}>
+                        <span
+                          title={app.status === 'rejected' && app.reject_reason ? `เหตุผลที่ปฏิเสธ: ${app.reject_reason}` : undefined}
+                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold border ${
+                            app.status === 'pending'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : app.status === 'approved'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-rose-50 text-rose-700 border-rose-200'
+                          }`}
+                        >
                           <span className={`h-1.5 w-1.5 rounded-full ${
                             app.status === 'pending' ? 'bg-amber-500' : app.status === 'approved' ? 'bg-emerald-500' : 'bg-rose-500'
                           }`} />
@@ -655,7 +768,7 @@ const SellersPage: React.FC = () => {
                       <td className="px-5 py-4 text-center">
                         <ActionButton
                           type="view"
-                          onClick={() => setSelectedApplication(app)}
+                          onClick={() => openApplicationReview(app)}
                           title="ตรวจสอบเอกสารและพิจารณาอนุมัติ"
                         />
                       </td>
@@ -915,27 +1028,61 @@ const SellersPage: React.FC = () => {
                     </div>
 
                     <div className="rounded-2xl bg-white p-3.5 border border-slate-200/60 shadow-2xs">
-                      <p className="text-xs font-bold text-slate-400">ที่อยู่ปัจจุบัน</p>
-                      <p className="mt-0.5 text-xs font-semibold text-slate-800 leading-relaxed">{selectedApplication.address}</p>
+                      <p className="text-xs font-bold text-slate-400 mb-1">ที่อยู่ปัจจุบัน</p>
+                      <textarea
+                        rows={2}
+                        value={inputAddress}
+                        onChange={(e) => setInputAddress(e.target.value)}
+                        placeholder="กรอกหรือแก้ไขที่อยู่ปัจจุบัน"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none resize-none"
+                      />
                     </div>
 
-                    {/* Read-Only Citizen ID Display */}
-                    <div className="rounded-2xl bg-white p-3.5 border border-slate-200/60 shadow-2xs flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-bold text-slate-400">เลขประจำตัวประชาชน (ผู้สมัครระบุ)</p>
-                        <p className="mt-0.5 text-sm font-mono font-extrabold text-slate-900 tracking-wider">
-                          {formatCitizenId(selectedApplication.citizen_id)}
-                        </p>
+                    {/* Editable Citizen ID Input */}
+                    <div className="rounded-2xl bg-white p-3.5 border border-slate-200/60 shadow-2xs">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs font-bold text-slate-500">เลขประจำตัวประชาชน 13 หลัก</p>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                          inputCitizenId.replace(/\D/g, '').length === 13
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-amber-50 text-amber-700'
+                        }`}>
+                          {inputCitizenId.replace(/\D/g, '').length === 13 ? '✓ ครบ 13 หลัก' : `${inputCitizenId.replace(/\D/g, '').length}/13 หลัก`}
+                        </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(selectedApplication.citizen_id, 'app_citizen_id')}
-                        className="rounded-xl bg-slate-100 p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition cursor-pointer"
-                        title="คัดลอกเลขบัตรประชาชน"
-                      >
-                        {copiedField === 'app_citizen_id' ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-                      </button>
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          maxLength={18}
+                          value={inputCitizenId}
+                          onChange={(e) => setInputCitizenId(e.target.value)}
+                          placeholder="กรอกเลขบัตรประชาชน 13 หลัก"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm font-mono font-bold text-slate-900 tracking-wider focus:border-blue-500 focus:bg-white focus:outline-none"
+                        />
+                        {inputCitizenId && (
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(inputCitizenId.replace(/\D/g, ''), 'app_citizen_id')}
+                            className="absolute right-2 rounded-lg bg-white p-1 text-slate-400 hover:text-blue-600 shadow-2xs cursor-pointer"
+                            title="คัดลอกเลขบัตร"
+                          >
+                            {copiedField === 'app_citizen_id' ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                          </button>
+                        )}
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        * ตรวจสอบความถูกต้องจากภาพถ่ายบัตรประชาชนด้านขวา และพิมพ์แก้ไขได้
+                      </p>
                     </div>
+
+                    {selectedApplication.reject_reason && (
+                      <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-xs text-rose-700">
+                        <p className="font-bold flex items-center gap-1.5 text-rose-800">
+                          <AlertTriangle className="h-4 w-4" /> เหตุผลที่เคยปฏิเสธคำขอ:
+                        </p>
+                        <p className="mt-1 font-medium pl-5 leading-relaxed">{selectedApplication.reject_reason}</p>
+                      </div>
+                    )}
 
                     <div className="rounded-xl bg-slate-200/60 p-3 text-xs font-semibold text-slate-600 flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-slate-500 shrink-0" />
@@ -998,19 +1145,21 @@ const SellersPage: React.FC = () => {
                   <div className="flex flex-col gap-2 pt-4 border-t border-slate-100 sm:flex-row sm:justify-end">
                     <button
                       type="button"
-                      onClick={() => void handleReview(String(selectedApplication.id), 'rejected')}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-50 border border-rose-200 px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-600 hover:text-white transition cursor-pointer active:scale-95"
+                      disabled={isSubmittingReview}
+                      onClick={handleOpenRejectModal}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-50 border border-rose-200 px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-600 hover:text-white transition cursor-pointer active:scale-95 disabled:opacity-50"
                     >
                       <XCircle className="h-4 w-4" />
                       ปฏิเสธคำขอ / ข้อมูลไม่ชัดเจน
                     </button>
                     <button
                       type="button"
-                      onClick={() => void handleReview(String(selectedApplication.id), 'approved')}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-extrabold text-white shadow-md hover:bg-emerald-700 transition cursor-pointer active:scale-95"
+                      disabled={isSubmittingReview}
+                      onClick={handleApprove}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-extrabold text-white shadow-md hover:bg-emerald-700 transition cursor-pointer active:scale-95 disabled:opacity-50"
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      อนุมัติเป็นผู้ค้า
+                      {isSubmittingReview ? 'กำลังบันทึก...' : 'อนุมัติเป็นผู้ค้า'}
                     </button>
                   </div>
                 </div>
@@ -1037,6 +1186,97 @@ const SellersPage: React.FC = () => {
               </div>
               <div className="overflow-hidden rounded-2xl bg-slate-950 flex justify-center p-2">
                 <img src={zoomedImage} alt="ภาพขยาย" className="max-h-[82vh] w-full object-contain rounded-xl" />
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+      {/* ── REJECTION REASON MODAL ── */}
+      {rejectModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[100001] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 bg-rose-600 px-6 py-4 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/20 text-white shadow-xs">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold">ระบุเหตุผลการปฏิเสธคำขอ</h3>
+                    <p className="text-xs text-rose-100">ผู้สมัคร: {rejectingAppName || 'ผู้สมัคร'}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRejectModalOpen(false)}
+                  className="rounded-xl p-1.5 text-rose-100 hover:bg-white/20 hover:text-white transition cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-4">
+                <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 leading-relaxed">
+                  📢 <strong>หมายเหตุ:</strong> ข้อความเหตุผลนี้จะถูกส่งไปแจ้งเตือนในโทรศัพท์ของผู้สมัคร และแสดงบนหน้าจอแอปเพื่อให้ผู้สมัครทราบและยื่นแก้ไขใหม่
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-2">
+                    เลือกเหตุผลด่วน (Quick Presets):
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRESET_REJECTION_REASONS.map((reason, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setRejectReason(reason)}
+                        className={`text-left rounded-xl px-3 py-1.5 text-xs font-semibold transition cursor-pointer border ${
+                          rejectReason === reason
+                            ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {reason}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    ข้อความเหตุผลการปฏิเสธ:
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="พิมพ์เหตุผลหรือคำแนะนำให้ผู้สมัครอย่างชัดเจน..."
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-3.5 text-xs font-medium text-slate-900 focus:border-rose-500 focus:bg-white focus:outline-none resize-none leading-relaxed"
+                  />
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 bg-slate-50 px-6 py-4">
+                <button
+                  type="button"
+                  disabled={isSubmittingReview}
+                  onClick={() => setRejectModalOpen(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer disabled:opacity-50"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmittingReview}
+                  onClick={handleConfirmReject}
+                  className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-xs font-extrabold text-white shadow-md hover:bg-rose-700 transition cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {isSubmittingReview ? 'กำลังส่งข้อมูล...' : 'ยืนยันการปฏิเสธคำขอ'}
+                </button>
               </div>
             </div>
           </div>,
