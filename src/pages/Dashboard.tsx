@@ -628,6 +628,10 @@ export const Dashboard: React.FC = () => {
 
   // View mode for Zone: 'donut' (overview) vs 'bar' (per-zone)
   const [zoneViewMode, setZoneViewMode] = useState<'donut' | 'bar'>('donut');
+  // View mode for Category: 'donut' (proportions) vs 'bar' (all ranked list)
+  const [categoryViewMode, setCategoryViewMode] = useState<'donut' | 'bar'>('donut');
+  // View mode for User Interests: 'donut' (proportions) vs 'bar' (all ranked list)
+  const [interestViewMode, setInterestViewMode] = useState<'donut' | 'bar'>('donut');
 
   const loadDashboardData = async () => {
     try {
@@ -1127,30 +1131,68 @@ export const Dashboard: React.FC = () => {
               <p className="text-[11px] font-semibold text-slate-400 mt-0.5">จำแนกตามความนิยมของผู้ค้า</p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsAddCategoryOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer"
-              title="เพิ่มหมวดหมู่สินค้าใหม่"
-            >
-              <FolderPlus className="h-3.5 w-3.5" />
-              <span>เพิ่ม</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center rounded-xl bg-slate-100 p-0.5 border border-slate-200 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setCategoryViewMode('donut')}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 transition cursor-pointer ${
+                    categoryViewMode === 'donut'
+                      ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="แสดงกราฟวงกลมโดนัท"
+                >
+                  <PieChart className="h-3 w-3" />
+                  <span>โดนัท</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryViewMode('bar')}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 transition cursor-pointer ${
+                    categoryViewMode === 'bar'
+                      ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="แสดงการจัดอันดับทุกหมวดหมู่"
+                >
+                  <BarChart2 className="h-3 w-3" />
+                  <span>จัดอันดับ</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAddCategoryOpen(true)}
+                className="flex items-center gap-1 rounded-xl bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer ml-0.5"
+                title="เพิ่มหมวดหมู่สินค้าใหม่"
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+                <span>เพิ่ม</span>
+              </button>
+            </div>
           </div>
 
           {/* Body: ModernAnalyticsChart */}
           <div className="flex-1 flex flex-col justify-center py-2 overflow-visible relative">
             <ModernAnalyticsChart
               data={categoryChartData}
-              totalCount={categories.length}
+              totalCount={categories.filter((c) => (c.count ?? 0) > 0).length || categories.length}
               unit="ร้านค้า"
               centerLabel="หมวดหมู่"
+              viewMode={categoryViewMode}
+              maxDisplay={5}
             />
           </div>
 
           {/* Footer */}
           <div className="shrink-0 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500">
-            <span>รวม {categories.length} หมวดหมู่</span>
+            <span>
+              รวม {categories.length} หมวดหมู่
+              <span className="font-extrabold text-slate-800 ml-1">
+                ({categoryChartData.reduce((sum, item) => sum + item.value, 0)} ร้านค้า)
+              </span>
+            </span>
             <button
               type="button"
               onClick={() => setIsViewAllCategoriesOpen(true)}
@@ -1178,15 +1220,46 @@ export const Dashboard: React.FC = () => {
               <p className="text-[11px] font-semibold text-slate-400 mt-0.5">สิ่งที่ผู้ใช้เลือกตอนลงทะเบียน</p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsAddInterestOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer"
-              title="เพิ่มตัวเลือกความสนใจใหม่"
-            >
-              <Heart className="h-3.5 w-3.5" />
-              <span>เพิ่ม</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center rounded-xl bg-slate-100 p-0.5 border border-slate-200 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setInterestViewMode('donut')}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 transition cursor-pointer ${
+                    interestViewMode === 'donut'
+                      ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="แสดงกราฟวงกลมโดนัท"
+                >
+                  <PieChart className="h-3 w-3" />
+                  <span>โดนัท</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInterestViewMode('bar')}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 transition cursor-pointer ${
+                    interestViewMode === 'bar'
+                      ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="แสดงการจัดอันดับทุกตัวเลือก"
+                >
+                  <BarChart2 className="h-3 w-3" />
+                  <span>จัดอันดับ</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAddInterestOpen(true)}
+                className="flex items-center gap-1 rounded-xl bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer ml-0.5"
+                title="เพิ่มตัวเลือกความสนใจใหม่"
+              >
+                <Heart className="h-3.5 w-3.5" />
+                <span>เพิ่ม</span>
+              </button>
+            </div>
           </div>
 
           {/* Body: ModernAnalyticsChart */}
@@ -1196,12 +1269,19 @@ export const Dashboard: React.FC = () => {
               totalCount={userInterests.length}
               unit="คน"
               centerLabel="ความสนใจ"
+              viewMode={interestViewMode}
+              maxDisplay={5}
             />
           </div>
 
           {/* Footer */}
           <div className="shrink-0 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500">
-            <span>รวม {userInterests.length} ตัวเลือก</span>
+            <span>
+              รวม {userInterests.length} ตัวเลือก
+              <span className="font-extrabold text-slate-800 ml-1">
+                ({interestChartData.reduce((sum, item) => sum + item.value, 0)} การเลือก)
+              </span>
+            </span>
             <button
               type="button"
               onClick={() => setIsViewAllInterestsOpen(true)}

@@ -2545,7 +2545,7 @@ export const AnnouncementsPage: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [activeCategory, setActiveCategory] = useState<'all' | 'urgent' | 'event' | 'general'>('all');
-  const [viewTab, setViewTab] = useState<'all' | 'active' | 'history'>('all');
+  const [viewTab, setViewTab] = useState<'all' | 'active' | 'history'>('active');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -2686,9 +2686,10 @@ export const AnnouncementsPage: React.FC = () => {
   const categoryOptions = [
     { label: 'ทั้งหมด', value: 'all' },
     { label: 'ประกาศด่วน', value: 'urgent' },
-    { label: 'ทั่วไป', value: 'general' },
     { label: 'กิจกรรม', value: 'event' },
+    { label: 'ทั่วไป', value: 'general' },
   ] as const;
+
 
   const loadAnnouncements = async () => {
     try {
@@ -2778,16 +2779,26 @@ export const AnnouncementsPage: React.FC = () => {
       });
     }
 
-    filtered.sort((a, b) => {
-      // 1. Prioritize urgent announcements to always appear first
-      if (a.category === 'urgent' && b.category !== 'urgent') return -1;
-      if (a.category !== 'urgent' && b.category === 'urgent') return 1;
+    const categoryPriority: Record<string, number> = {
+      urgent: 0,
+      event: 1,
+      general: 2,
+    };
 
-      // 2. Sort by date descending (newest first)
+    filtered.sort((a, b) => {
+      // 1. หมวดหมู่: ประกาศด่วน (0) -> กิจกรรม (1) -> ประกาศทั่วไป (2)
+      const priorityA = a.category ? (categoryPriority[a.category] ?? 3) : 3;
+      const priorityB = b.category ? (categoryPriority[b.category] ?? 3) : 3;
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // 2. เรียงตามวันที่ล่าสุดก่อน (Newest first)
       const timeA = a.rawDate ? new Date(a.rawDate).getTime() : 0;
       const timeB = b.rawDate ? new Date(b.rawDate).getTime() : 0;
       return timeB - timeA;
     });
+
 
     return filtered;
   }, [activeCategory, viewTab, announcements, search, startDate, endDate]);
@@ -3572,10 +3583,10 @@ export const AnnouncementsPage: React.FC = () => {
             <table className="min-w-[950px] w-full text-sm">
               <thead className="bg-slate-100 text-slate-600">
                 <tr>
-                  <th className="px-5 py-3.5 text-left font-semibold">รูปภาพ</th>
+                  <th className="px-5 py-3.5 text-left font-semibold">ช่วงเวลาประกาศ</th>
                   <th className="px-5 py-3.5 text-left font-semibold">หัวข้อและรายละเอียด</th>
                   <th className="px-5 py-3.5 text-left font-semibold">หมวดหมู่</th>
-                  <th className="px-5 py-3.5 text-left font-semibold">ช่วงเวลาประกาศ</th>
+                  <th className="px-5 py-3.5 text-left font-semibold">รูปภาพ</th>
                   <th className="px-5 py-3.5 text-left font-semibold">สถานะ</th>
                   <th className="px-5 py-3.5 text-center font-semibold">จัดการ</th>
                 </tr>
@@ -3586,28 +3597,6 @@ export const AnnouncementsPage: React.FC = () => {
                   const statusMeta = getStatusMeta(item);
                   return (
                     <tr key={item.id} className="transition-colors hover:bg-slate-50/60">
-                      <td className="px-5 py-3">
-                        {item.image ? (
-                          <img
-                            src={item.image}
-                            alt={item.title}
-                            className="h-12 w-16 rounded-xl object-cover border border-slate-200/80"
-                          />
-                        ) : (
-                          <div className="flex h-12 w-16 items-center justify-center rounded-xl border border-slate-200/80 bg-slate-100 text-slate-400">
-                            <ImageOff className="h-5 w-5" />
-                          </div>
-                        )}
-                      </td>
-                      <td className="max-w-[340px] px-5 py-3">
-                        <div className="font-bold text-slate-900 line-clamp-1">{item.title}</div>
-                        <div className="mt-0.5 text-xs text-slate-500 line-clamp-1">{item.description}</div>
-                      </td>
-                      <td className="px-5 py-3 whitespace-nowrap">
-                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${categoryMeta.className}`}>
-                          {categoryMeta.label}
-                        </span>
-                      </td>
                       <td className="px-5 py-3 whitespace-nowrap text-xs text-slate-600">
                         <div className="flex items-center gap-1.5 font-medium">
                           <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
@@ -3621,6 +3610,28 @@ export const AnnouncementsPage: React.FC = () => {
                             <span className="text-slate-400">(ไม่มีกำหนดสิ้นสุด)</span>
                           )}
                         </div>
+                      </td>
+                      <td className="max-w-[340px] px-5 py-3">
+                        <div className="font-bold text-slate-900 line-clamp-1">{item.title}</div>
+                        <div className="mt-0.5 text-xs text-slate-500 line-clamp-1">{item.description}</div>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${categoryMeta.className}`}>
+                          {categoryMeta.label}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        {item.image ? (
+                          <img
+                            src={item.image}
+                            alt={item.title}
+                            className="h-12 w-16 rounded-xl object-cover border border-slate-200/80"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-16 items-center justify-center rounded-xl border border-slate-200/80 bg-slate-100 text-slate-400">
+                            <ImageOff className="h-5 w-5" />
+                          </div>
+                        )}
                       </td>
                       <td className="px-5 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2.5">
@@ -3764,9 +3775,9 @@ export const AnnouncementsPage: React.FC = () => {
                     onChange={(event) => setForm((current) => ({ ...current, category: event.target.value as Announcement['category'] }))}
                     className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                   >
-                    <option value="general">ประกาศทั่วไป</option>
                     <option value="urgent">ประกาศด่วน</option>
                     <option value="event">กิจกรรม</option>
+                    <option value="general">ประกาศทั่วไป</option>
                   </select>
                 </div>
 

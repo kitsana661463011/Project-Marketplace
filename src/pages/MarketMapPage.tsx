@@ -212,7 +212,26 @@ export const MarketMapPage: React.FC = () => {
       const items = Array.isArray(json?.data?.items) ? json.data.items : [];
       const zones = Array.isArray(json?.data?.zones) ? json.data.zones : [];
 
-      setDbZones(zones);
+      const zonesMap = new Map<number, { zone_id: number; zone_name: string; zone_price: number }>();
+      zones.forEach((z: any) => {
+        if (z?.zone_id) {
+          zonesMap.set(Number(z.zone_id), {
+            zone_id: Number(z.zone_id),
+            zone_name: z.zone_name || `โซน #${z.zone_id}`,
+            zone_price: Number(z.zone_price) || 0,
+          });
+        }
+      });
+      items.forEach((it: any) => {
+        if (it.item_type === 'zone' && it.zone_id && !zonesMap.has(Number(it.zone_id))) {
+          zonesMap.set(Number(it.zone_id), {
+            zone_id: Number(it.zone_id),
+            zone_name: it.label || `โซน #${it.zone_id}`,
+            zone_price: 0,
+          });
+        }
+      });
+      setDbZones(Array.from(zonesMap.values()));
 
       const mappedItems = items.map((item: any) => {
         // Determine effective status:
@@ -830,7 +849,8 @@ export const MarketMapPage: React.FC = () => {
               ? 'maintenance'
               : (['occupied', 'approved', 'verified', 'pending'].includes(createStatus) ? 'occupied' : (createStatus || 'available'));
             formPayload.append('status', validCreateStatus);
-            formPayload.append('zone_id', String(createZoneId || dbZones[0]?.zone_id || 1));
+            const effectiveZoneId = createZoneId || dbZones[0]?.zone_id || 1;
+            formPayload.append('zone_id', String(effectiveZoneId));
             formPayload.append('size', createSize || '3x3 เมตร');
             formPayload.append('price', String(calcPrice || 500));
             formPayload.append('rental_type', createRentalType);
@@ -894,7 +914,7 @@ export const MarketMapPage: React.FC = () => {
           image2: finalImage2,
           images: finalImages,
           item_type: createItemType,
-          zone_id: (createItemType === 'block' || createItemType === 'zone') ? createZoneId : null,
+          zone_id: (createItemType === 'block' || createItemType === 'zone') ? (createZoneId || dbZones[0]?.zone_id || null) : null,
         };
         setStalls([...stalls, newElement]);
         setSelectedStallId(newElement.id);
@@ -1667,7 +1687,16 @@ export const MarketMapPage: React.FC = () => {
                     </span>
                   </div>
                   <h4 className="text-2xl font-black text-slate-900">{selectedStall.code}</h4>
-                  <p className="text-xs text-slate-500 font-medium">ขนาดพื้นที่: <span className="font-bold text-slate-800">{selectedStall.size}</span></p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 font-medium">
+                    <p>ขนาดพื้นที่: <span className="font-bold text-slate-800">{selectedStall.size}</span></p>
+                    {selectedStall.zone_id && (
+                      <p>
+                        สังกัดโซน: <span className="font-bold text-indigo-700">
+                          {dbZones.find(z => z.zone_id === selectedStall.zone_id)?.zone_name || `โซน #${selectedStall.zone_id}`}
+                        </span>
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Rental & Pricing Details Card */}
@@ -2289,8 +2318,59 @@ export const MarketMapPage: React.FC = () => {
                   />
                 </div>
 
+                {createItemType === 'zone' && (
+                  <div className="space-y-4 rounded-2xl bg-blue-50/50 p-4 border border-blue-100">
+                    <div>
+                      <label className="font-bold text-slate-700 flex items-center justify-between">
+                        <span>ผูกกับโซนในระบบ (หรือสร้างโซนใหม่)</span>
+                      </label>
+                      <select
+                        value={createZoneId || ''}
+                        onChange={(e) => {
+                          const zid = Number(e.target.value) || null;
+                          setCreateZoneId(zid);
+                          if (zid) {
+                            const found = dbZones.find(z => z.zone_id === zid);
+                            if (found) setCreateCode(found.zone_name);
+                          }
+                        }}
+                        className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">-- กำหนดเป็นโซนใหม่ (ตามชื่อที่พิมพ์ด้านบน) --</option>
+                        {dbZones.map((z) => (
+                          <option key={z.zone_id} value={z.zone_id}>
+                            {z.zone_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
                 {createItemType === 'block' && (
                   <div className="space-y-4 rounded-2xl bg-indigo-50/50 p-4 border border-indigo-100">
+                    {/* สังกัดโซนตลาดนัด */}
+                    <div>
+                      <label className="font-bold text-slate-700 flex items-center justify-between">
+                        <span>สังกัดโซนตลาดนัด</span>
+                        <span className="text-[10px] font-medium text-indigo-600">
+                          {dbZones.length > 0 ? `พบ ${dbZones.length} โซนในระบบ` : ''}
+                        </span>
+                      </label>
+                      <select
+                        value={createZoneId || ''}
+                        onChange={(e) => setCreateZoneId(Number(e.target.value) || null)}
+                        className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                      >
+                        <option value="">-- ไม่ระบุโซน --</option>
+                        {dbZones.map((z) => (
+                          <option key={z.zone_id} value={z.zone_id}>
+                            {z.zone_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     {/* ขนาดแผง & สถานะแผง */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
