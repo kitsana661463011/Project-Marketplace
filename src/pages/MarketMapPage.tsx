@@ -383,7 +383,8 @@ export const MarketMapPage: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error('ไม่สามารถบันทึกตำแหน่งแผนผังลงฐานข้อมูลได้');
+        const errJson = await response.json().catch(() => null);
+        throw new Error(errJson?.message || errJson?.error || 'ไม่สามารถบันทึกตำแหน่งแผนผังลงฐานข้อมูลได้');
       }
 
       alert('บันทึกตำแหน่งแผนผังตลาดนัดลงฐานข้อมูลสำเร็จ');
@@ -554,7 +555,10 @@ export const MarketMapPage: React.FC = () => {
         setIsSavingStallImages(true);
         const formPayload = new FormData();
         formPayload.append('stall_number', newCode || ('STALL-' + Date.now().toString().slice(-4)));
-        formPayload.append('status', editStatus === 'repair' ? 'maintenance' : (editStatus || 'available'));
+        const validStallStatus = (editStatus === 'repair' || editStatus === 'maintenance')
+          ? 'maintenance'
+          : (['occupied', 'approved', 'verified', 'pending'].includes(editStatus) ? 'occupied' : (editStatus || 'available'));
+        formPayload.append('status', validStallStatus);
         formPayload.append('zone_id', String(editZoneId || dbZones[0]?.zone_id || 1));
         formPayload.append('size', editSize || '3x3 เมตร');
         formPayload.append('price', String(calcPrice || 500));
@@ -822,7 +826,10 @@ export const MarketMapPage: React.FC = () => {
             setIsCreatingStall(true);
             const formPayload = new FormData();
             formPayload.append('stall_number', finalLabel || ('STALL-' + Date.now().toString().slice(-4)));
-            formPayload.append('status', createStatus === 'repair' ? 'maintenance' : (createStatus || 'available'));
+            const validCreateStatus = (createStatus === 'repair' || createStatus === 'maintenance')
+              ? 'maintenance'
+              : (['occupied', 'approved', 'verified', 'pending'].includes(createStatus) ? 'occupied' : (createStatus || 'available'));
+            formPayload.append('status', validCreateStatus);
             formPayload.append('zone_id', String(createZoneId || dbZones[0]?.zone_id || 1));
             formPayload.append('size', createSize || '3x3 เมตร');
             formPayload.append('price', String(calcPrice || 500));

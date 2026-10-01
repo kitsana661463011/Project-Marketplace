@@ -11,6 +11,11 @@ interface DashboardLayoutProps {
   pageTitle: string;
   user?: User;
   notificationCount?: number;
+  badgeCounts?: {
+    verifications?: number;
+    sellers?: number;
+    reports?: number;
+  };
   onLogout?: () => void;
   onNotificationClick?: () => void;
   onSearch?: (query: string) => void;
@@ -23,6 +28,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   onNavigate,
   pageTitle,
   user,
+  badgeCounts,
   onLogout,
 }) => {
   return (
@@ -41,7 +47,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       {/* Main Content */}
       <div className="flex flex-col flex-1 w-full lg:ml-64">
         {/* Topbar */}
-        <Topbar title={pageTitle} />
+        <Topbar title={pageTitle} badgeCounts={badgeCounts} />
 
         {/* Page Content */}
         <main className="flex-1 overflow-auto">

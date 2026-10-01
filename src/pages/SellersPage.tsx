@@ -47,9 +47,9 @@ const formatDate = (dateString: string | null | undefined) => {
 };
 
 const PRESET_REJECTION_REASONS = [
-  'ภาพถ่ายบัตรประชาชนไม่ชัดเจน ไม่สามารถอ่านข้อมูลหรือตัวเลขได้',
-  'ข้อมูลชื่อ-นามสกุล หรือเลขบัตรประชาชนไม่ตรงกับภาพถ่าย',
-  'ภาพถ่ายไม่ใช่บัตรประจำตัวประชาชน หรือเอกสารหมดอายุ',
+  'ภาพถ่ายสำเนาบัตรประชาชนไม่ชัดเจน ไม่สามารถอ่านข้อมูลหรือตัวเลขได้',
+  'ข้อมูลชื่อ-นามสกุล หรือเลขบัตรประชาชนไม่ตรงกับสำเนาบัตรประชาชน',
+  'ภาพถ่ายไม่ใช่สำเนาบัตรประจำตัวประชาชน หรือไม่มีการลงนามรับรองสำเนาถูกต้อง',
   'ข้อมูลที่อยู่หรือช่องทางการติดต่อไม่ครบถ้วนถูกต้อง',
 ];
 
@@ -1071,7 +1071,7 @@ const SellersPage: React.FC = () => {
                         )}
                       </div>
                       <p className="mt-1 text-[11px] text-slate-400">
-                        * ตรวจสอบความถูกต้องจากภาพถ่ายบัตรประชาชนด้านขวา และพิมพ์แก้ไขได้
+                        * ตรวจสอบความถูกต้องจากภาพถ่ายสำเนาบัตรประชาชนด้านขวา และพิมพ์แก้ไขได้
                       </p>
                     </div>
 
@@ -1099,7 +1099,7 @@ const SellersPage: React.FC = () => {
                         <FileText className="h-4 w-4" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-slate-900">หลักฐานภาพถ่ายบัตรประชาชน</h4>
+                        <h4 className="text-sm font-bold text-slate-900">หลักฐานภาพถ่ายสำเนาบัตรประชาชน</h4>
                         <p className="text-xs text-slate-400">ตรวจสอบความชัดเจนของรูปถ่ายและตัวเลข</p>
                       </div>
                     </div>
@@ -1112,7 +1112,7 @@ const SellersPage: React.FC = () => {
                       >
                         <img
                           src={(selectedApplication.document_url as string) ?? 'https://images.unsplash.com/photo-1578496781402-06032763b4f3?auto=format&fit=crop&w=900&q=80'}
-                          alt="ภาพบัตรประชาชน"
+                          alt="ภาพสำเนาบัตรประชาชน"
                           className="h-full w-full object-contain bg-slate-100 rounded-xl transition duration-200 group-hover:scale-105"
                         />
                         <div className="absolute inset-0 flex items-center justify-center bg-slate-900/30 opacity-0 transition group-hover:opacity-100">

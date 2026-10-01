@@ -1513,6 +1513,8 @@ export const ReportsPage: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<'all' | 'electric' | 'water' | 'structure' | 'clean' | 'feedback' | 'other'>('all');
   const [activeStatus, setActiveStatus] = useState<'all' | 'pending' | 'progress' | 'resolved'>('all');
   const [selectedReport, setSelectedReport] = useState<IssueReport | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adminNote, setAdminNote] = useState('');
@@ -1618,6 +1620,24 @@ export const ReportsPage: React.FC = () => {
     });
     return filtered;
   }, [reports, startDate, endDate, activeStatus]);
+
+  const totalPages = Math.ceil(filteredReports.length / itemsPerPage) || 1;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, activeCategory, activeStatus, startDate, endDate]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
+
+  const paginatedReports = useMemo(() => {
+    const safePage = Math.min(currentPage, totalPages);
+    const start = (safePage - 1) * itemsPerPage;
+    return filteredReports.slice(start, start + itemsPerPage);
+  }, [filteredReports, currentPage, itemsPerPage, totalPages]);
 
   const summary = useMemo(() => {
     const total = reports.length;
@@ -1925,7 +1945,7 @@ export const ReportsPage: React.FC = () => {
                     ไม่พบรายการแจ้งปัญหาตามเงื่อนไขที่เลือก
                   </td>
                 </tr>
-              ) : filteredReports.map((report) => {
+              ) : paginatedReports.map((report) => {
                 const typeMeta = getTypeMeta(report.type);
                 const statusMeta = getStatusMeta(report.status);
                 return (
@@ -1974,6 +1994,51 @@ export const ReportsPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Reports Pagination Bar */}
+        {filteredReports.length > 0 && (
+          <div className="flex flex-col gap-3 border-t border-slate-200/80 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between text-xs font-semibold text-slate-600">
+            <div>
+              แสดง <span className="text-slate-900 font-bold">{Math.min((currentPage - 1) * itemsPerPage + 1, filteredReports.length)}</span> - <span className="text-slate-900 font-bold">{Math.min(currentPage * itemsPerPage, filteredReports.length)}</span> จากทั้งหมด <span className="text-slate-900 font-bold">{filteredReports.length}</span> รายการ
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 shadow-2xs"
+                  title="หน้าก่อนหน้า"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-xl border text-xs font-bold transition shadow-2xs ${
+                      currentPage === pageNum
+                        ? 'border-sky-600 bg-sky-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 shadow-2xs"
+                  title="หน้าถัดไป"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {selectedReport && (() => {
@@ -2480,9 +2545,9 @@ export const AnnouncementsPage: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [activeCategory, setActiveCategory] = useState<'all' | 'urgent' | 'event' | 'general'>('all');
-  const [viewTab, setViewTab] = useState<'active' | 'history'>('active');
+  const [viewTab, setViewTab] = useState<'all' | 'active' | 'history'>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
+  const itemsPerPage = 10;
 
   // Calendar Date Range Picker states
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -2684,7 +2749,7 @@ export const AnnouncementsPage: React.FC = () => {
   const filteredAnnouncements = useMemo(() => {
     let filtered = announcements.filter((item) => {
       const matchesCategory = activeCategory === 'all' || item.category === activeCategory;
-      const matchesView = viewTab === 'active' ? !item.isExpired : item.isExpired;
+      const matchesView = viewTab === 'all' ? true : viewTab === 'active' ? !item.isExpired : item.isExpired;
 
       const matchesSearch = [item.title, item.description, item.date, item.endDate || '']
         .join(' ')
@@ -2995,35 +3060,45 @@ export const AnnouncementsPage: React.FC = () => {
         <div className="relative mt-6 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
           {[
             {
+              tab: 'all' as const,
               label: 'ประกาศทั้งหมด',
               value: announcements.length,
               unit: 'รายการ',
               icon: Megaphone,
               iconBg: 'bg-sky-50 text-sky-600 border-sky-100',
               accent: 'hover:border-sky-300',
+              activeBorder: viewTab === 'all' ? 'border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/20 shadow-xs' : '',
             },
             {
+              tab: 'active' as const,
               label: 'กำลังประกาศ (Active)',
-              value: announcements.filter((a) => !a.isExpired && a.status === 'active').length,
+              value: announcements.filter((a) => !a.isExpired).length,
               unit: 'รายการ',
               icon: Clock,
               iconBg: 'bg-emerald-50 text-emerald-600 border-emerald-100',
               accent: 'hover:border-emerald-300',
+              activeBorder: viewTab === 'active' ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/20 shadow-xs' : '',
             },
             {
+              tab: 'history' as const,
               label: 'เสร็จสิ้นแล้ว (History)',
               value: announcements.filter((a) => a.isExpired).length,
               unit: 'รายการ',
               icon: CheckCircle2,
               iconBg: 'bg-slate-100 text-slate-600 border-slate-200',
               accent: 'hover:border-slate-300',
+              activeBorder: viewTab === 'history' ? 'border-slate-800 ring-2 ring-slate-800/20 bg-slate-50 shadow-xs' : '',
             },
           ].map((stat) => {
             const Icon = stat.icon;
             return (
               <div
                 key={stat.label}
-                className={`group flex items-center justify-between rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs transition-all duration-200 ${stat.accent}`}
+                onClick={() => {
+                  setViewTab(stat.tab);
+                  setCurrentPage(1);
+                }}
+                className={`group flex items-center justify-between rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs transition-all duration-200 cursor-pointer hover:-translate-y-0.5 ${stat.accent} ${stat.activeBorder}`}
               >
                 <div>
                   <p className="text-sm font-bold text-slate-600">{stat.label}</p>
@@ -3041,68 +3116,95 @@ export const AnnouncementsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── View Switcher & Filter Bar ── */}
-      <div className="space-y-3">
-        {/* View Switcher Tabs */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setViewTab('active');
-              setCurrentPage(1);
-            }}
-            className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold transition shadow-xs ${viewTab === 'active'
-              ? 'bg-sky-600 text-white shadow-sky-100'
-              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+      {/* ── Unified Filter Bar (รวมฟิลเตอร์สถานะ ค้นหา หมวดหมู่ และวันที่ไว้ในแถบเดียว) ── */}
+      <div className="relative rounded-[22px] border border-slate-200/80 bg-white p-3.5 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Status Tabs Segment */}
+          <div className="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200/60 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setViewTab('all');
+                setCurrentPage(1);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                viewTab === 'all'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
-          >
-            <span>กำลังประกาศ</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-black ${viewTab === 'active' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
             >
-              {announcements.filter((a) => !a.isExpired).length}
-            </span>
-          </button>
+              <span>ทั้งหมด</span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-black ${
+                  viewTab === 'all' ? 'bg-slate-100 text-slate-700' : 'bg-slate-200 text-slate-600'
+                }`}
+              >
+                {announcements.length}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setViewTab('history');
-              setCurrentPage(1);
-            }}
-            className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold transition shadow-xs ${viewTab === 'history'
-              ? 'bg-slate-800 text-white shadow-slate-200'
-              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+            <button
+              type="button"
+              onClick={() => {
+                setViewTab('active');
+                setCurrentPage(1);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                viewTab === 'active'
+                  ? 'bg-sky-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
-          >
-            <span>ประวัติประกาศ (เสร็จสิ้นแล้ว)</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-black ${viewTab === 'history' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
             >
-              {announcements.filter((a) => a.isExpired).length}
-            </span>
-          </button>
-        </div>
+              <span>กำลังประกาศ</span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-black ${
+                  viewTab === 'active' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+                }`}
+              >
+                {announcements.filter((a) => !a.isExpired).length}
+              </span>
+            </button>
 
-        {/* Filter Bar */}
-        <div className="relative rounded-[20px] border border-slate-200/80 bg-white shadow-xs">
-          <div className="flex flex-wrap items-center gap-2.5 px-4 py-3">
-            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm w-64 shrink-0">
-              <Search className="h-4 w-4 shrink-0 text-slate-400" />
-              <input
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="ค้นหาหัวข้อประกาศ..."
-                className="w-full border-none bg-transparent outline-none placeholder:text-slate-400 text-slate-900 text-sm"
-              />
-            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setViewTab('history');
+                setCurrentPage(1);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                viewTab === 'history'
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>เสร็จสิ้นแล้ว</span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-black ${
+                  viewTab === 'history' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+                }`}
+              >
+                {announcements.filter((a) => a.isExpired).length}
+              </span>
+            </button>
+          </div>
 
-            <div className="h-5 w-px bg-slate-200 shrink-0 hidden sm:block" />
+          <div className="h-5 w-px bg-slate-200 shrink-0 hidden sm:block" />
+
+          {/* Search Bar */}
+          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm w-56 sm:w-64 shrink-0">
+            <Search className="h-4 w-4 shrink-0 text-slate-400" />
+            <input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="ค้นหาหัวข้อประกาศ..."
+              className="w-full border-none bg-transparent outline-none placeholder:text-slate-400 text-slate-900 text-sm"
+            />
+          </label>
+
+          <div className="h-5 w-px bg-slate-200 shrink-0 hidden sm:block" />
 
             {categoryOptions.map((option) => {
               const isActive = activeCategory === option.value;
@@ -3441,7 +3543,6 @@ export const AnnouncementsPage: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
 
       {error ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
@@ -3466,105 +3567,114 @@ export const AnnouncementsPage: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="space-y-5">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {paginatedAnnouncements.map((item) => {
-              const categoryMeta = getCategoryMeta(item.category);
-              const statusMeta = getStatusMeta(item);
-              return (
-                <div
-                  key={item.id}
-                  className="group relative flex flex-col overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300"
-                >
-                  {/* Cover image */}
-                  {item.image ? (
-                    <img src={item.image} alt={item.title} className="h-40 w-full object-cover" />
-                  ) : (
-                    <div className="flex h-32 w-full items-center justify-center bg-gradient-to-br from-slate-100 to-slate-50">
-                      <ImageOff className="h-8 w-8 text-slate-300" />
-                    </div>
-                  )}
-
-                  {/* Badges row */}
-                  <div className="absolute left-3 top-3 flex items-center gap-1.5">
-                    <span className={`rounded-full border px-2.5 py-0.5 text-xs font-bold shadow-sm bg-white/90 backdrop-blur-sm ${categoryMeta.className}`}>
-                      {categoryMeta.label}
-                    </span>
-                    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold shadow-sm bg-white/90 backdrop-blur-sm ${statusMeta.className}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
-                      {statusMeta.label}
-                    </span>
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex flex-1 flex-col p-5">
-                    <h3 className="text-base font-bold leading-snug text-slate-900 line-clamp-2">{item.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-slate-500 line-clamp-2">{item.description}</p>
-
-                    {/* Date range */}
-                    <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
-                      <CalendarDays className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span>{item.date}</span>
-                      {item.endDate && (
-                        <>
-                          <span className="text-slate-300">→</span>
-                          <span>{item.endDate}</span>
-                        </>
-                      )}
-                      {!item.endDate && <span className="text-slate-400">(ไม่มีกำหนดสิ้นสุด)</span>}
-                    </div>
-
-                    {/* Footer actions */}
-                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
-                      {/* Toggle */}
-                      <label className="relative inline-flex cursor-pointer items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={item.status === 'active'}
-                          onChange={() => handleToggleStatus(item.id)}
-                          className="peer sr-only"
-                        />
-                        <div className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500" />
-                        <div className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                        <span className="text-xs font-semibold text-slate-500">
-                          {item.status === 'active' ? 'เปิดอยู่' : 'ปิดอยู่'}
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="min-w-[950px] w-full text-sm">
+              <thead className="bg-slate-100 text-slate-600">
+                <tr>
+                  <th className="px-5 py-3.5 text-left font-semibold">รูปภาพ</th>
+                  <th className="px-5 py-3.5 text-left font-semibold">หัวข้อและรายละเอียด</th>
+                  <th className="px-5 py-3.5 text-left font-semibold">หมวดหมู่</th>
+                  <th className="px-5 py-3.5 text-left font-semibold">ช่วงเวลาประกาศ</th>
+                  <th className="px-5 py-3.5 text-left font-semibold">สถานะ</th>
+                  <th className="px-5 py-3.5 text-center font-semibold">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {paginatedAnnouncements.map((item) => {
+                  const categoryMeta = getCategoryMeta(item.category);
+                  const statusMeta = getStatusMeta(item);
+                  return (
+                    <tr key={item.id} className="transition-colors hover:bg-slate-50/60">
+                      <td className="px-5 py-3">
+                        {item.image ? (
+                          <img
+                            src={item.image}
+                            alt={item.title}
+                            className="h-12 w-16 rounded-xl object-cover border border-slate-200/80"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-16 items-center justify-center rounded-xl border border-slate-200/80 bg-slate-100 text-slate-400">
+                            <ImageOff className="h-5 w-5" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="max-w-[340px] px-5 py-3">
+                        <div className="font-bold text-slate-900 line-clamp-1">{item.title}</div>
+                        <div className="mt-0.5 text-xs text-slate-500 line-clamp-1">{item.description}</div>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${categoryMeta.className}`}>
+                          {categoryMeta.label}
                         </span>
-                      </label>
-
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => openPreviewModal(item)}
-                          title="ดูตัวอย่าง"
-                          className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-600"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => openEditModal(item)}
-                          title="แก้ไข"
-                          className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          title="ลบ"
-                          className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap text-xs text-slate-600">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
+                          <span>{item.date}</span>
+                          {item.endDate ? (
+                            <>
+                              <span className="text-slate-300">→</span>
+                              <span>{item.endDate}</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-400">(ไม่มีกำหนดสิ้นสุด)</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2.5">
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold ${statusMeta.className}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
+                            {statusMeta.label}
+                          </span>
+                          <label className="relative inline-flex cursor-pointer items-center" title="เปิด/ปิดการแสดงผล">
+                            <input
+                              type="checkbox"
+                              checked={item.status === 'active'}
+                              onChange={() => handleToggleStatus(item.id)}
+                              className="peer sr-only"
+                            />
+                            <div className="h-4 w-7 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500" />
+                            <div className="absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-white shadow transition peer-checked:translate-x-3" />
+                          </label>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => openPreviewModal(item)}
+                            title="ดูตัวอย่าง"
+                            className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-600 cursor-pointer"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => openEditModal(item)}
+                            title="แก้ไข"
+                            className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            title="ลบ"
+                            className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
           {/* Pagination Footer */}
           {filteredAnnouncements.length > 0 && (
-            <div className="flex flex-col gap-3 rounded-[20px] border border-slate-200/80 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between text-xs font-semibold text-slate-600 shadow-xs">
+            <div className="flex flex-col gap-3 border-t border-slate-200/80 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between text-xs font-semibold text-slate-600">
               <div>
                 แสดง <span className="text-slate-900 font-bold">{Math.min((currentPage - 1) * itemsPerPage + 1, filteredAnnouncements.length)}</span> - <span className="text-slate-900 font-bold">{Math.min(currentPage * itemsPerPage, filteredAnnouncements.length)}</span> จากทั้งหมด <span className="text-slate-900 font-bold">{filteredAnnouncements.length}</span> รายการ
               </div>
@@ -3584,10 +3694,11 @@ export const AnnouncementsPage: React.FC = () => {
                     <button
                       key={pageNum}
                       onClick={() => setCurrentPage(pageNum)}
-                      className={`flex h-8 w-8 items-center justify-center rounded-xl border text-xs font-bold transition shadow-2xs ${currentPage === pageNum
-                        ? 'border-sky-600 bg-sky-600 text-white'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
-                        }`}
+                      className={`flex h-8 w-8 items-center justify-center rounded-xl border text-xs font-bold transition shadow-2xs ${
+                        currentPage === pageNum
+                          ? 'border-sky-600 bg-sky-600 text-white'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                      }`}
                     >
                       {pageNum}
                     </button>

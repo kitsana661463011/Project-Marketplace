@@ -93,6 +93,7 @@ const PageShell: React.FC<ShellProps> = ({ title, children }) => {
       pageTitle={title}
       user={user || fallbackUser}
       notificationCount={totalNotifications}
+      badgeCounts={badgeCounts}
       onLogout={logout}
       onNotificationClick={() => undefined}
       onSearch={() => undefined}

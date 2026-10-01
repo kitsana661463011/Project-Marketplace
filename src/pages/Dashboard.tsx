@@ -26,11 +26,19 @@ import {
   ZoomIn,
   ZoomOut,
   MapPin,
-  Maximize2,
   RefreshCw,
   Pencil,
+  PieChart,
+  BarChart2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import {
+  ModernAnalyticsChart,
+  ZoneOccupancyChart,
+  ChartDataItem,
+} from '../components/dashboard/ModernAnalyticsChart';
 
 type OverviewCard = {
   title: string;
@@ -113,14 +121,40 @@ const interestBarColors = [
   'from-slate-500 to-slate-600',
 ];
 
-const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = ({ navigate }) => {
+
+
+const MarketMapPreviewSection: React.FC = () => {
   const [stalls, setStalls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [zoom, setZoom] = useState(1);
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [zoom, setZoom] = useState(0.55);
+  const [panOffset, setPanOffset] = useState({ x: 20, y: 20 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
+
+  const centerMarketAtScale = (scale = 0.55, stallList?: any[]) => {
+    setZoom(scale);
+    const list = stallList || stalls;
+    if (!list || list.length === 0) {
+      setPanOffset({ x: 20, y: 20 });
+      return;
+    }
+    const minX = Math.min(...list.map((s: any) => s.x));
+    const maxX = Math.max(...list.map((s: any) => s.x + s.width));
+    const minY = Math.min(...list.map((s: any) => s.y));
+    const maxY = Math.max(...list.map((s: any) => s.y + s.height));
+
+    const marketW = (maxX - minX) * scale;
+    const marketH = (maxY - minY) * scale;
+    const containerW = 880;
+    const containerH = 460;
+
+    const offsetX = Math.round((containerW - marketW) / 2 - minX * scale);
+    const offsetY = Math.round((containerH - marketH) / 2 - minY * scale);
+
+    setPanOffset({ x: Math.max(10, offsetX), y: Math.max(10, offsetY) });
+  };
 
   useEffect(() => {
     const loadMap = async () => {
@@ -130,31 +164,31 @@ const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = 
         if (!res.ok) return;
         const json = await res.json();
         const items = Array.isArray(json?.data?.items) ? json.data.items : [];
-        setStalls(
-          items.map((item: any) => ({
-            id: String(item.map_item_id),
-            code: item.label || `แผงค้า #${item.stall_id || item.map_item_id}`,
-            status: item.status || 'available',
-            item_type: item.item_type || 'block',
-            stall_id: item.stall_id,
-            zone_id: item.zone_id,
-            x: Number(item.x) || 100,
-            y: Number(item.y) || 100,
-            width: Number(item.width) || 75,
-            height: Number(item.height) || 75,
-            fill_color: item.fill_color,
-            size: item.size || '3x3 เมตร',
-            price: item.price || 500,
-            rental_type: item.rental_type || 'daily',
-            daily_price: item.daily_price !== undefined && item.daily_price !== null ? Number(item.daily_price) : (item.price || 500),
-            monthly_price: item.monthly_price !== undefined && item.monthly_price !== null ? Number(item.monthly_price) : null,
-            entry_fee: item.entry_fee !== undefined && item.entry_fee !== null ? Number(item.entry_fee) : null,
-            security_deposit: item.security_deposit !== undefined && item.security_deposit !== null ? Number(item.security_deposit) : null,
-            has_electricity: item.has_electricity !== undefined ? Boolean(item.has_electricity) : true,
-            has_water: item.has_water !== undefined ? Boolean(item.has_water) : true,
-            seller: item.seller,
-          }))
-        );
+        const mapped = items.map((item: any) => ({
+          id: String(item.map_item_id),
+          code: item.label || `แผงค้า #${item.stall_id || item.map_item_id}`,
+          status: item.status || 'available',
+          item_type: item.item_type || 'block',
+          stall_id: item.stall_id,
+          zone_id: item.zone_id,
+          x: Number(item.x) || 100,
+          y: Number(item.y) || 100,
+          width: Number(item.width) || 75,
+          height: Number(item.height) || 75,
+          fill_color: item.fill_color,
+          size: item.size || '3x3 เมตร',
+          price: item.price || 500,
+          rental_type: item.rental_type || 'daily',
+          daily_price: item.daily_price !== undefined && item.daily_price !== null ? Number(item.daily_price) : (item.price || 500),
+          monthly_price: item.monthly_price !== undefined && item.monthly_price !== null ? Number(item.monthly_price) : null,
+          entry_fee: item.entry_fee !== undefined && item.entry_fee !== null ? Number(item.entry_fee) : null,
+          security_deposit: item.security_deposit !== undefined && item.security_deposit !== null ? Number(item.security_deposit) : null,
+          has_electricity: item.has_electricity !== undefined ? Boolean(item.has_electricity) : true,
+          has_water: item.has_water !== undefined ? Boolean(item.has_water) : true,
+          seller: item.seller,
+        }));
+        setStalls(mapped);
+        centerMarketAtScale(0.55, mapped);
       } catch {
         // fail silently
       } finally {
@@ -256,8 +290,56 @@ const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = 
     return 0;
   });
 
+  if (!isExpanded) {
+    return (
+      <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs transition-all hover:border-blue-300">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 shadow-2xs">
+              <MapPin className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900">ตัวอย่างแผนผังตลาดนัด (Interactive Market Map)</h3>
+                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-extrabold text-blue-700 border border-blue-200">
+                  ภาพรวมผังตลาด
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                กดเพื่อแสดงผังภาพรวมทั้งตลาด พร้อมตรวจสอบสถานะแผงค้าและตำแหน่งร้านค้า
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="hidden sm:flex items-center gap-2 text-xs font-extrabold mr-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> ว่าง ({availableCount})
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-200 px-2.5 py-1 text-rose-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-600" /> มีผู้เช่า ({occupiedCount})
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsExpanded(true);
+                centerMarketAtScale(0.55);
+              }}
+              className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer"
+            >
+              <Eye className="h-4 w-4" />
+              <span>แสดงแผนผัง</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-6 sm:p-7 shadow-xs space-y-4">
+    <section className="rounded-[28px] border border-slate-200 bg-white p-6 sm:p-7 shadow-xs space-y-4 animate-in fade-in duration-200">
       {/* Section Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -266,6 +348,9 @@ const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = 
               <MapPin className="h-4.5 w-4.5" />
             </span>
             <h3 className="text-lg font-extrabold text-slate-900">ตัวอย่างแผนผังตลาดนัด (Interactive Market Map)</h3>
+            <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-black text-blue-700 border border-blue-200">
+              ภาพรวมทั้งตลาด
+            </span>
           </div>
           <p className="mt-1 text-xs font-semibold text-slate-600">
             แสดงผังโครงสร้างแผงค้าในตลาด (สามารถลากเลื่อนดูตำแหน่งแผงค้าและขยายย่อได้ ไม่สามารถแก้ไขตำแหน่งหรือเพิ่มข้อมูลได้)
@@ -284,11 +369,12 @@ const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = 
 
           <button
             type="button"
-            onClick={() => navigate('/stores')}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition cursor-pointer active:scale-95"
+            onClick={() => setIsExpanded(false)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer active:scale-95"
+            title="ย่อเก็บแผนผังเป็นปุ่มไอคอน"
           >
-            <Maximize2 className="h-4 w-4" />
-            <span>จัดการผังเต็ม</span>
+            <EyeOff className="h-4 w-4 text-slate-500" />
+            <span>ซ่อนแผนผัง</span>
           </button>
         </div>
       </div>
@@ -362,11 +448,18 @@ const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = 
             <ZoomIn className="h-4 w-4" />
           </button>
           <button
-            onClick={() => setZoom((z) => Math.max(0.4, z - 0.15))}
+            onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 transition"
             title="ย่อ"
           >
             <ZoomOut className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => centerMarketAtScale(0.55)}
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-extrabold text-blue-700 bg-blue-50 hover:bg-blue-100 transition"
+            title="จัดมุมมองให้เห็นทั้งตลาด"
+          >
+            <span>ทั้งตลาด</span>
           </button>
           <button
             onClick={() => {
@@ -374,7 +467,7 @@ const MarketMapPreviewSection: React.FC<{ navigate: (path: string) => void }> = 
               setPanOffset({ x: 0, y: 0 });
             }}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 transition"
-            title="รีเซ็ตตำแหน่ง"
+            title="รีเซ็ต 100%"
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
@@ -532,6 +625,9 @@ export const Dashboard: React.FC = () => {
   const [isViewAllInterestsOpen, setIsViewAllInterestsOpen] = useState(false);
   const [deletingCategoryId, setDeletingCategoryId] = useState<string | number | null>(null);
   const [deletingInterestId, setDeletingInterestId] = useState<number | null>(null);
+
+  // View mode for Zone: 'donut' (overview) vs 'bar' (per-zone)
+  const [zoneViewMode, setZoneViewMode] = useState<'donut' | 'bar'>('donut');
 
   const loadDashboardData = async () => {
     try {
@@ -745,6 +841,20 @@ export const Dashboard: React.FC = () => {
 
   const { summary, zones, categories, userInterests } = dashboardData;
 
+  const categoryChartData: ChartDataItem[] = categories.map((cat) => ({
+    id: cat.id,
+    label: cat.name,
+    value: cat.count ?? cat.value ?? 0,
+    percentage: cat.percentage ?? 0,
+  }));
+
+  const interestChartData: ChartDataItem[] = userInterests.map((item) => ({
+    id: item.id,
+    label: item.name,
+    value: item.count ?? 0,
+    percentage: item.percentage ?? 0,
+  }));
+
   const filteredCategories = categories.filter((c) =>
     c.name.toLowerCase().includes(categorySearch.trim().toLowerCase())
   );
@@ -754,145 +864,143 @@ export const Dashboard: React.FC = () => {
   );
 
   return (
-    <div className="space-y-7 animate-in fade-in duration-300">
-      <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {/* 1. แจ้งเหตุ/ปัญหา (หน้าสุด) */}
         <button
           type="button"
           onClick={() => navigate('/reports')}
-          className="group relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white p-6 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-rose-200 hover:shadow-md cursor-pointer"
+          className="group relative overflow-hidden rounded-[22px] border border-slate-200/80 bg-white p-4.5 sm:p-5 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-rose-200 hover:shadow-md cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">แจ้งเหตุ/ปัญหา</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 border border-rose-100/80 text-rose-600 transition-transform group-hover:scale-105">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">แจ้งเหตุ/ปัญหา</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-50 border border-rose-100/80 text-rose-600 transition-transform group-hover:scale-105">
               <ShieldAlert className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4">
+          <div className="mt-3">
             <div className="flex items-baseline gap-1.5">
-              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.pending_reports ?? 0}</p>
-              <span className="text-sm font-semibold text-slate-400">เคส</span>
+              <p className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">{summary.pending_reports ?? 0}</p>
+              <span className="text-xs font-semibold text-slate-400">เคส</span>
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-rose-600">
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-rose-600">
               <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-              <span>ต้องตรวจสอบ / ซ่อมแซมด่วน</span>
+              <span>ต้องตรวจสอบด่วน</span>
             </div>
           </div>
-          <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+          <ArrowUpRight className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
 
         {/* 2. คำขอจองรออนุมัติ */}
         <button
           type="button"
           onClick={() => navigate('/verifications')}
-          className="group relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white p-6 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-md cursor-pointer"
+          className="group relative overflow-hidden rounded-[22px] border border-slate-200/80 bg-white p-4.5 sm:p-5 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-md cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">คำขอจองรออนุมัติ</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 border border-amber-100/80 text-amber-600 transition-transform group-hover:scale-105">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">คำขอจองรออนุมัติ</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-50 border border-amber-100/80 text-amber-600 transition-transform group-hover:scale-105">
               <BadgeCheck className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4">
+          <div className="mt-3">
             <div className="flex items-baseline gap-1.5">
-              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.pending_bookings ?? 0}</p>
-              <span className="text-sm font-semibold text-slate-400">รายการ</span>
+              <p className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">{summary.pending_bookings ?? 0}</p>
+              <span className="text-xs font-semibold text-slate-400">รายการ</span>
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500">
               <Clock className="h-3.5 w-3.5 text-amber-500" />
-              <span>รอการตรวจสอบจากแอดมิน</span>
+              <span>รอการตรวจสอบ</span>
             </div>
           </div>
-          <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+          <ArrowUpRight className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
 
         {/* 3. ข้อมูลผู้ค้า */}
         <button
           type="button"
           onClick={() => navigate('/sellers')}
-          className="group relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white p-6 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md cursor-pointer"
+          className="group relative overflow-hidden rounded-[22px] border border-slate-200/80 bg-white p-4.5 sm:p-5 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">ข้อมูลผู้ค้า</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 border border-slate-200/60 text-slate-700 transition-transform group-hover:scale-105">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">ข้อมูลผู้ค้า</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 border border-slate-200/60 text-slate-700 transition-transform group-hover:scale-105">
               <Users className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4">
+          <div className="mt-3">
             <div className="flex items-baseline gap-1.5">
-              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.total_sellers ?? 0}</p>
-              <span className="text-sm font-semibold text-slate-400">ราย</span>
+              <p className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">{summary.total_sellers ?? 0}</p>
+              <span className="text-xs font-semibold text-slate-400">ราย</span>
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500">
               <Users className="h-3.5 w-3.5 text-slate-400" />
-              <span>ผู้ค้าในระบบที่อนุมัติแล้ว</span>
+              <span>ผู้ค้าที่อนุมัติแล้ว</span>
             </div>
           </div>
-          <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+          <ArrowUpRight className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
 
         {/* 4. รายการรออนุมัติผู้สมัครใหม่ */}
         <button
           type="button"
           onClick={() => navigate('/sellers')}
-          className="group relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white p-6 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md cursor-pointer"
+          className="group relative overflow-hidden rounded-[22px] border border-slate-200/80 bg-white p-4.5 sm:p-5 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">รายการรออนุมัติผู้สมัครใหม่</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 border border-indigo-100/80 text-indigo-600 transition-transform group-hover:scale-105">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">รออนุมัติผู้สมัครใหม่</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 border border-indigo-100/80 text-indigo-600 transition-transform group-hover:scale-105">
               <UserRound className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4">
+          <div className="mt-3">
             <div className="flex items-baseline gap-1.5">
-              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.pending_sellers ?? 0}</p>
-              <span className="text-sm font-semibold text-slate-400">รายการ</span>
+              <p className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">{summary.pending_sellers ?? 0}</p>
+              <span className="text-xs font-semibold text-slate-400">รายการ</span>
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500">
               <Clock className="h-3.5 w-3.5 text-indigo-400" />
               <span>รอการตรวจสอบเอกสาร</span>
             </div>
           </div>
-          <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+          <ArrowUpRight className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
 
         {/* 5. จำนวนแผงค้าในตลาดทั้งหมด */}
         <button
           type="button"
           onClick={() => navigate('/stores')}
-          className="group relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white p-6 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md cursor-pointer"
+          className="group relative overflow-hidden rounded-[22px] border border-slate-200/80 bg-white p-4.5 sm:p-5 text-left shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">จำนวนแผงค้าในตลาดทั้งหมด</span>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 border border-blue-100/80 text-blue-600 transition-transform group-hover:scale-105">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">แผงค้าในตลาดทั้งหมด</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 border border-blue-100/80 text-blue-600 transition-transform group-hover:scale-105">
               <Store className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4">
+          <div className="mt-3">
             <div className="flex items-baseline gap-1.5">
-              <p className="text-3xl font-black tracking-tight text-slate-900">{summary.total_stalls ?? 0}</p>
-              <span className="text-sm font-semibold text-slate-400">แผง</span>
+              <p className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">{summary.total_stalls ?? 0}</p>
+              <span className="text-xs font-semibold text-slate-400">แผง</span>
             </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
-              <Building2 className="h-3.5 w-3.5 text-blue-500" />
-              <span>
-                มีผู้เช่า {summary.occupied_stalls ?? 0} แผง / ว่าง {summary.available_stalls ?? ((summary.total_stalls ?? 0) - (summary.occupied_stalls ?? 0))} แผง
-              </span>
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500 truncate">
+              <Building2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+              <span>เช่า {summary.occupied_stalls ?? 0} / ว่าง {summary.available_stalls ?? ((summary.total_stalls ?? 0) - (summary.occupied_stalls ?? 0))}</span>
             </div>
           </div>
-          <ArrowUpRight className="absolute right-4 top-4 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+          <ArrowUpRight className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
       </section>
 
-      <section className="rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
-        <div className="flex items-center justify-between mb-4">
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-3.5 sm:p-4 shadow-xs">
+        <div className="flex items-center justify-between mb-2.5">
           <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-blue-600" /> ทางลัดการจัดการข้อมูล (Admin Quick Actions)
+            <Sparkles className="h-3.5 w-3.5 text-blue-600" /> ทางลัดการจัดการข้อมูล (Admin Quick Actions)
           </h3>
-          <span className="text-xs text-slate-400 font-medium">คลิกเพื่อไปยังหน้านั้นๆ ทันที</span>
+          <span className="text-[11px] text-slate-400 font-medium">คลิกเพื่อไปยังหน้านั้นๆ ทันที</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
           {[
             { label: 'อนุมัติการจองแผง', icon: BadgeCheck, href: '/verifications', badge: summary.pending_bookings },
             { label: 'ตรวจสอบการชำระเงิน', icon: CreditCard, href: '/payments' },
@@ -906,222 +1014,142 @@ export const Dashboard: React.FC = () => {
                 key={action.label}
                 type="button"
                 onClick={() => navigate(action.href)}
-                className="group flex flex-col items-center justify-center rounded-2xl border border-slate-200/80 bg-white p-4 text-center transition-all duration-200 hover:border-blue-300 hover:bg-blue-50/20 hover:shadow-xs active:scale-98 cursor-pointer"
+                className="group flex flex-col items-center justify-center rounded-xl border border-slate-200/80 bg-white p-2.5 sm:p-3 text-center transition-all duration-200 hover:border-blue-300 hover:bg-blue-50/20 hover:shadow-xs active:scale-98 cursor-pointer"
               >
-                <div className="relative mb-2.5">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-100/80 transition-all duration-200 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 group-hover:scale-105 group-hover:shadow-md group-hover:shadow-blue-500/20">
-                    <IconComp className="h-6 w-6" />
+                <div className="relative mb-1.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100/80 transition-all duration-200 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 group-hover:scale-105 group-hover:shadow-md group-hover:shadow-blue-500/20">
+                    <IconComp className="h-4.5 w-4.5" />
                   </div>
                   {action.badge ? (
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-xs ring-2 ring-white">
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white shadow-xs ring-2 ring-white">
                       {action.badge}
                     </span>
                   ) : null}
                 </div>
-                <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-blue-600">{action.label}</span>
+                <span className="text-[11px] font-bold text-slate-700 transition-colors group-hover:text-blue-600">{action.label}</span>
               </button>
             );
           })}
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-3 items-stretch">
+      <section className="grid gap-5 lg:grid-cols-3 items-stretch">
         {/* 1. ความหนาแน่นโซนตลาด */}
-        <div className="h-[420px] rounded-[28px] border border-slate-200 bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between overflow-hidden">
-          <div className="shrink-0 mb-3 border-b border-slate-100 pb-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-extrabold text-slate-900">ความหนาแน่นโซนตลาด</h3>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
-                    {zones.length} โซน
-                  </span>
-                </div>
-                <p className="mt-1 text-xs font-semibold text-slate-600">สถานะแผงค้าว่างและแผงมีผู้เช่าแบ่งตามโซน</p>
+        <div className="h-[340px] rounded-[26px] border border-slate-200/90 bg-white p-5 shadow-xs flex flex-col justify-between overflow-hidden">
+          <div className="shrink-0 pb-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900">ความหนาแน่นโซนตลาด</h3>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700 border border-slate-200">
+                  {zones.length} โซน
+                </span>
               </div>
+              <p className="text-[11px] font-semibold text-slate-400 mt-0.5">การครองแผงและการกระจายตัว</p>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center rounded-xl bg-slate-100 p-0.5 border border-slate-200 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setZoneViewMode('donut')}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 transition cursor-pointer ${
+                    zoneViewMode === 'donut'
+                      ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="แสดงภาพรวมกราฟวงกลม"
+                >
+                  <PieChart className="h-3 w-3" />
+                  <span>ภาพรวม</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoneViewMode('bar')}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 transition cursor-pointer ${
+                    zoneViewMode === 'bar'
+                      ? 'bg-white text-blue-600 shadow-2xs font-extrabold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="แสดงกราฟแท่งแยกรายโซน"
+                >
+                  <BarChart2 className="h-3 w-3" />
+                  <span>รายโซน</span>
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={() => navigate('/stores')}
-                className="flex items-center gap-1 text-xs font-extrabold text-blue-600 hover:text-blue-700 transition cursor-pointer"
+                className="flex items-center text-[11px] font-extrabold text-blue-600 hover:text-blue-700 transition cursor-pointer ml-0.5"
+                title="ดูแผนผังตลาดเต็ม"
               >
                 <span>ผังเต็ม</span>
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+          {/* Body: Zone Occupancy Visualizer */}
+          <div className="flex-1 flex flex-col justify-center py-2 overflow-visible relative">
             {zones.length > 0 ? (
-              zones.map((zone) => {
-                const total = zone.total_stalls || 1;
-                const occupiedPct = Math.round((zone.occupied_count / total) * 100);
-                return (
-                  <div
-                    key={zone.zone_id}
-                    onClick={() => navigate('/stores')}
-                    className="group cursor-pointer rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3.5 shadow-2xs transition-all duration-200 hover:border-blue-300 hover:bg-white hover:shadow-md"
-                  >
-                    {/* Zone Header */}
-                    <div className="flex items-center justify-between mb-2.5">
-                      <span className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition">
-                        {zone.zone_name}
-                      </span>
-                      <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
-                        ทั้งหมด {total} แผง
-                      </span>
-                    </div>
-
-                    {/* Stats Grid: มีผู้เช่า vs ว่าง */}
-                    <div className="grid grid-cols-2 gap-2 mb-2.5">
-                      <div className="rounded-xl bg-slate-100/80 p-2 border border-slate-200/60 flex items-center justify-between">
-                        <span className="text-xs font-medium text-slate-600">มีผู้เช่า:</span>
-                        <span className="font-extrabold text-sm text-blue-600">{zone.occupied_count} แผง</span>
-                      </div>
-                      <div className="rounded-xl bg-slate-100/80 p-2 border border-slate-200/60 flex items-center justify-between">
-                        <span className="text-xs font-medium text-slate-600">ว่าง:</span>
-                        <span className="font-extrabold text-sm text-emerald-600">{zone.available_count} แผง</span>
-                      </div>
-                    </div>
-
-                    {/* Occupancy Indicator Bar */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[11px] font-bold text-slate-600">
-                        <span>อัตราการครองแผงโซนนี้</span>
-                        <span className="font-black text-slate-900">{occupiedPct}%</span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-slate-200 flex">
-                        <div
-                          className="h-full bg-blue-600 transition-all duration-500 rounded-full"
-                          style={{ width: `${occupiedPct}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+              <ZoneOccupancyChart
+                zones={zones}
+                totalStalls={summary.total_stalls ?? zones.reduce((s, z) => s + (z.total_stalls || 0), 0)}
+                occupiedStalls={summary.occupied_stalls ?? zones.reduce((s, z) => s + (z.occupied_count || 0), 0)}
+                availableStalls={summary.available_stalls ?? Math.max(0, (summary.total_stalls ?? 0) - (summary.occupied_stalls ?? 0))}
+                viewMode={zoneViewMode}
+                navigate={navigate}
+              />
             ) : (
-              <div className="flex h-full items-center justify-center text-xs font-semibold text-slate-500">ไม่มีข้อมูลโซนตลาด</div>
+              <div className="flex h-full items-center justify-center text-xs font-semibold text-slate-400">
+                ไม่มีข้อมูลโซนตลาด
+              </div>
             )}
           </div>
 
-          <div className="shrink-0 pt-3 mt-1 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600">
+          {/* Footer */}
+          <div className="shrink-0 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500">
             <span>รวม {zones.length} โซนในผังตลาด</span>
-            <span className="font-extrabold text-slate-900">ทั้งหมด {summary.total_stalls ?? 0} แผง</span>
+            <span className="font-extrabold text-slate-800">ทั้งหมด {summary.total_stalls ?? 0} แผง</span>
           </div>
         </div>
 
         {/* 2. สัดส่วนประเภทสินค้า */}
-        <div className="h-[420px] rounded-[28px] border border-slate-200 bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between overflow-hidden">
-          <div className="shrink-0 mb-3 border-b border-slate-100 pb-3 space-y-2.5">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-extrabold text-slate-900">สัดส่วนประเภทสินค้า</h3>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
-                    {categories.length} หมวดหมู่
-                  </span>
-                </div>
-                <p className="mt-1 text-xs font-semibold text-slate-600">หมวดหมู่ร้านค้าจำแนกตามความนิยม</p>
+        <div className="h-[340px] rounded-[26px] border border-slate-200/90 bg-white p-5 shadow-xs flex flex-col justify-between overflow-hidden">
+          <div className="shrink-0 pb-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900">สัดส่วนประเภทสินค้า</h3>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700 border border-slate-200">
+                  {categories.length} หมวด
+                </span>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setIsAddCategoryOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer"
-              >
-                <FolderPlus className="h-4 w-4" />
-                <span>เพิ่มหมวดหมู่</span>
-              </button>
+              <p className="text-[11px] font-semibold text-slate-400 mt-0.5">จำแนกตามความนิยมของผู้ค้า</p>
             </div>
 
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <input
-                type="text"
-                placeholder="ค้นหาหมวดหมู่สินค้า..."
-                value={categorySearch}
-                onChange={(e) => setCategorySearch(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3.5 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:bg-white focus:outline-none"
-              />
-              {categorySearch && (
-                <button
-                  type="button"
-                  onClick={() => setCategorySearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            {categorySuccessMsg && (
-              <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 animate-in fade-in duration-200">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                <span>{categorySuccessMsg}</span>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => setIsAddCategoryOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer"
+              title="เพิ่มหมวดหมู่สินค้าใหม่"
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+              <span>เพิ่ม</span>
+            </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
-            {filteredCategories.length > 0 ? (
-              filteredCategories.map((category, index) => {
-                const count = category.count ?? category.value ?? 0;
-                const percentage = category.percentage ?? 0;
-                return (
-                  <div key={`${category.id ?? 'cat'}-${category.name}`} className="group rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 transition-colors hover:bg-slate-100/70">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="min-w-0 pr-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-sm text-slate-900 truncate">{category.name}</span>
-                          <span className="text-xs font-bold text-slate-600 shrink-0">({count} ร้านค้า)</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-extrabold text-slate-700 shadow-2xs border border-slate-200 shrink-0">
-                          {percentage}%
-                        </span>
-                        {category.id != null && (
-                          <div className="flex items-center gap-0.5">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditCategory(category)}
-                              className="rounded-full p-1 text-slate-400 hover:bg-blue-100 hover:text-blue-700 transition"
-                              title="แก้ไขหมวดหมู่"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteCategory(category.id!)}
-                              disabled={deletingCategoryId === category.id}
-                              className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
-                              title="ลบหมวดหมู่"
-                            >
-                              {deletingCategoryId === category.id ? (
-                                <span className="text-[10px] font-semibold">กำลังลบ</span>
-                              ) : (
-                                <Trash2 className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200/90">
-                      <div
-                        className={`h-full rounded-full bg-gradient-to-r transition-all duration-500 ease-out ${categoryBarColors[index % categoryBarColors.length]}`}
-                        style={{ width: `${Math.max(percentage, 2)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="flex h-full items-center justify-center text-xs font-semibold text-slate-500">ไม่พบหมวดหมู่สินค้าที่ค้นหา</div>
-            )}
+          {/* Body: ModernAnalyticsChart */}
+          <div className="flex-1 flex flex-col justify-center py-2 overflow-visible relative">
+            <ModernAnalyticsChart
+              data={categoryChartData}
+              totalCount={categories.length}
+              unit="ร้านค้า"
+              centerLabel="หมวดหมู่"
+            />
           </div>
 
-          <div className="shrink-0 pt-3 mt-1 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600">
+          {/* Footer */}
+          <div className="shrink-0 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500">
             <span>รวม {categories.length} หมวดหมู่</span>
             <button
               type="button"
@@ -1129,134 +1157,64 @@ export const Dashboard: React.FC = () => {
               className="flex items-center gap-0.5 font-extrabold text-blue-600 hover:text-blue-700 transition cursor-pointer"
             >
               <span>ดูทั้งหมด ({categories.length})</span>
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
 
         {/* 3. ความสนใจของผู้ใช้ */}
-        <div className="h-[420px] rounded-[28px] border border-slate-200 bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between overflow-hidden">
-          <div className="shrink-0 mb-3 border-b border-slate-100 pb-3 space-y-2.5">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-1.5">
-                    <Heart className="h-5 w-5 text-slate-600" />
-                    <span>ความสนใจของผู้ใช้</span>
-                  </h3>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-extrabold text-slate-700 border border-slate-200">
-                    {userInterests.length} ตัวเลือก
-                  </span>
-                </div>
-                <p className="mt-1 text-xs font-semibold text-slate-600">สิ่งที่ผู้สมัครเลือกตอนลงทะเบียน</p>
+        <div className="h-[340px] rounded-[26px] border border-slate-200/90 bg-white p-5 shadow-xs flex flex-col justify-between overflow-hidden">
+          <div className="shrink-0 pb-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1">
+                  <Heart className="h-4 w-4 text-rose-500" />
+                  <span>ความสนใจของผู้ใช้</span>
+                </h3>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700 border border-slate-200">
+                  {userInterests.length} ตัวเลือก
+                </span>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setIsAddInterestOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer"
-              >
-                <Heart className="h-4 w-4" />
-                <span>เพิ่มตัวเลือก</span>
-              </button>
+              <p className="text-[11px] font-semibold text-slate-400 mt-0.5">สิ่งที่ผู้ใช้เลือกตอนลงทะเบียน</p>
             </div>
 
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <input
-                type="text"
-                placeholder="ค้นหาตัวเลือกความสนใจ..."
-                value={interestSearch}
-                onChange={(e) => setInterestSearch(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3.5 py-1.5 text-xs font-semibold text-slate-900 placeholder:text-slate-500 focus:border-blue-500 focus:bg-white focus:outline-none"
-              />
-              {interestSearch && (
-                <button
-                  type="button"
-                  onClick={() => setInterestSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            {interestSuccessMsg && (
-              <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 animate-in fade-in duration-200">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                <span>{interestSuccessMsg}</span>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => setIsAddInterestOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition active:scale-95 cursor-pointer"
+              title="เพิ่มตัวเลือกความสนใจใหม่"
+            >
+              <Heart className="h-3.5 w-3.5" />
+              <span>เพิ่ม</span>
+            </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
-            {filteredInterests.length > 0 ? (
-              filteredInterests.map((interest, index) => (
-                <div key={`interest-${interest.name}`} className="group rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 transition-colors hover:bg-slate-100/70">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="min-w-0 pr-2 flex items-center gap-2">
-                      {index === 0 && <span className="text-sm shrink-0">🔥</span>}
-                      <span className="font-extrabold text-sm text-slate-900 truncate">{interest.name}</span>
-                      <span className="text-xs font-bold text-slate-500 shrink-0">({interest.count} คน)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-lg bg-white px-2.5 py-0.5 text-xs font-extrabold text-slate-700 shadow-2xs border border-slate-200 shrink-0">
-                        {interest.percentage}%
-                      </span>
-                      {interest.id != null && (
-                        <div className="flex items-center gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditInterest(interest)}
-                            className="rounded-full p-1 text-slate-400 hover:bg-blue-100 hover:text-blue-700 transition"
-                            title="แก้ไขตัวเลือกความสนใจ"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteInterest(interest.id!)}
-                            disabled={deletingInterestId === interest.id}
-                            className="rounded-full p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-700 transition"
-                            title="ลบตัวเลือกความสนใจ"
-                          >
-                            {deletingInterestId === interest.id ? (
-                              <span className="text-[10px] font-semibold">กำลังลบ</span>
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200/90">
-                    <div
-                      className={`h-full rounded-full bg-gradient-to-r transition-all duration-500 ease-out ${interestBarColors[index % interestBarColors.length]}`}
-                      style={{ width: `${interest.percentage}%` }}
-                    />
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="flex h-full items-center justify-center text-xs font-semibold text-slate-500">ไม่พบตัวเลือกความสนใจที่ค้นหา</div>
-            )}
+          {/* Body: ModernAnalyticsChart */}
+          <div className="flex-1 flex flex-col justify-center py-2 overflow-visible relative">
+            <ModernAnalyticsChart
+              data={interestChartData}
+              totalCount={userInterests.length}
+              unit="คน"
+              centerLabel="ความสนใจ"
+            />
           </div>
 
-          <div className="shrink-0 pt-3 mt-1 border-t border-slate-100 flex items-center justify-end text-xs font-bold text-slate-600">
+          {/* Footer */}
+          <div className="shrink-0 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500">
+            <span>รวม {userInterests.length} ตัวเลือก</span>
             <button
               type="button"
               onClick={() => setIsViewAllInterestsOpen(true)}
               className="flex items-center gap-0.5 font-extrabold text-blue-600 hover:text-blue-700 transition cursor-pointer"
             >
               <span>ดูทั้งหมด ({userInterests.length})</span>
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
       </section>
 
-      <MarketMapPreviewSection navigate={navigate} />
+      <MarketMapPreviewSection />
 
       {/* ── Add Category Modal Portal ── */}
       {isAddCategoryOpen &&
@@ -1789,6 +1747,16 @@ export const Dashboard: React.FC = () => {
                 </div>
               </form>
             </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Toast Notification */}
+      {(categorySuccessMsg || interestSuccessMsg) &&
+        createPortal(
+          <div className="fixed bottom-6 right-6 z-[9999] flex items-center gap-2.5 rounded-2xl bg-slate-900/95 text-white px-4 py-3 shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-5 duration-200 border border-slate-700/80">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+            <span className="text-xs font-bold">{categorySuccessMsg || interestSuccessMsg}</span>
           </div>,
           document.body
         )}
