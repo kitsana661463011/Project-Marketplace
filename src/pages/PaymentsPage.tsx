@@ -1204,6 +1204,7 @@ const PaymentsPage: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/60 text-xs font-black uppercase tracking-wider text-slate-500">
+                <th className="px-4 py-4 text-center w-16">ลำดับ</th>
                 <th className="px-6 py-4">วันที่ / เวลา</th>
                 <th className="px-6 py-4">ผู้ค้า / แผงค้า</th>
                 <th className="px-6 py-4">รายละเอียด</th>
@@ -1216,12 +1217,12 @@ const PaymentsPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100 text-sm">
               {paginatedPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-24 text-center text-sm font-semibold text-slate-400">
+                  <td colSpan={8} className="px-6 py-24 text-center text-sm font-semibold text-slate-400">
                     ไม่พบรายการชำระเงินตามเงื่อนไขที่เลือก
                   </td>
                 </tr>
               ) : (
-                paginatedPayments.map((txn) => {
+                paginatedPayments.map((txn, index) => {
                   const paymentDateStr = formatThaiDateTime(txn.payment_date);
                   const tenantName = txn.booking?.user?.username || 'ไม่ระบุ';
                   const stallNum = txn.booking?.stall?.stall_number || '-';
@@ -1230,6 +1231,9 @@ const PaymentsPage: React.FC = () => {
 
                   return (
                     <tr key={txn.payment_id} className="transition-colors hover:bg-slate-50/80">
+                      <td className="px-4 py-4 text-center font-bold text-slate-500 text-xs">
+                        {(activePage - 1) * itemsPerPage + index + 1}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-700">
                         {paymentDateStr}
                       </td>

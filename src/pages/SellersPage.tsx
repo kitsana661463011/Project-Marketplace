@@ -502,6 +502,7 @@ const SellersPage: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50/80">
                 <tr>
+                  <th className="px-4 py-3.5 text-center text-xs font-bold uppercase tracking-wider text-slate-600 w-16">ลำดับ</th>
                   <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-600">ผู้ค้า / บัญชีผู้ใช้</th>
                   <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-600">เลขบัตรประชาชน</th>
                   <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-600">เบอร์ติดต่อ</th>
@@ -513,19 +514,22 @@ const SellersPage: React.FC = () => {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {isLoadingSellers ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-sm font-semibold text-slate-500">
+                    <td colSpan={7} className="px-5 py-12 text-center text-sm font-semibold text-slate-500">
                       กำลังโหลดข้อมูลผู้ค้าในระบบ...
                     </td>
                   </tr>
                 ) : pagedSellers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-sm font-medium text-slate-500">
+                    <td colSpan={7} className="px-5 py-12 text-center text-sm font-medium text-slate-500">
                       ไม่พบข้อมูลผู้ค้าตรงตามเงื่อนไขที่ค้นหา
                     </td>
                   </tr>
                 ) : (
-                  pagedSellers.map((seller) => (
+                  pagedSellers.map((seller, index) => (
                     <tr key={seller.id} className="group transition-colors hover:bg-blue-50/30">
+                      <td className="px-4 py-4 text-center font-bold text-slate-500 text-xs">
+                        {(vendorPage - 1) * pageSize + index + 1}
+                      </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <img src={seller.avatar} alt={seller.name} className="h-10 w-10 shrink-0 rounded-2xl object-cover shadow-2xs border border-slate-200/60" />
@@ -695,6 +699,7 @@ const SellersPage: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50/80">
                 <tr>
+                  <th className="px-4 py-3.5 text-center text-xs font-bold uppercase tracking-wider text-slate-600 w-16">ลำดับ</th>
                   <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-600">ผู้สมัครค้าขายใหม่</th>
                   <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-600">เบอร์ติดต่อ</th>
                   <th className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-600">วันที่ยื่นเรื่อง</th>
@@ -706,19 +711,22 @@ const SellersPage: React.FC = () => {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {isLoadingApplications ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-sm font-semibold text-slate-500">
+                    <td colSpan={7} className="px-5 py-12 text-center text-sm font-semibold text-slate-500">
                       กำลังโหลดคำขอสมัครใหม่...
                     </td>
                   </tr>
                 ) : pagedApplications.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-sm font-medium text-slate-500">
+                    <td colSpan={7} className="px-5 py-12 text-center text-sm font-medium text-slate-500">
                       ไม่มีรายการคำขอสมัครใหม่ในขณะนี้
                     </td>
                   </tr>
                 ) : (
-                  pagedApplications.map((app) => (
+                  pagedApplications.map((app, index) => (
                     <tr key={app.id} className="group transition-colors hover:bg-amber-50/30">
+                      <td className="px-4 py-4 text-center font-bold text-slate-500 text-xs">
+                        {(applicationPage - 1) * pageSize + index + 1}
+                      </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <img src={app.avatar} alt={app.name} className="h-10 w-10 shrink-0 rounded-2xl object-cover shadow-2xs border border-slate-200/60" />

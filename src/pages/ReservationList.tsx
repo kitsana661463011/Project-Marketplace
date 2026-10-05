@@ -601,6 +601,7 @@ export const ReservationListPage: React.FC = () => {
           <table className="min-w-[850px] w-full text-left border-collapse">
             <thead className="bg-slate-50/80 border-b border-slate-200/70 text-xs font-bold uppercase tracking-wider text-slate-500">
               <tr>
+                <th className="px-4 py-4 text-center w-16">ลำดับ</th>
                 <th className="px-6 py-4">ผู้จอง</th>
                 <th className="px-6 py-4">โซน / เลขแผง</th>
                 <th className="px-6 py-4">วันที่ทำรายการ</th>
@@ -612,19 +613,22 @@ export const ReservationListPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-xs font-semibold text-slate-400">
+                  <td colSpan={7} className="px-6 py-12 text-center text-xs font-semibold text-slate-400">
                     กำลังโหลดข้อมูลรายการจอง...
                   </td>
                 </tr>
               ) : currentReservations.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-xs font-semibold text-slate-400">
+                  <td colSpan={7} className="px-6 py-12 text-center text-xs font-semibold text-slate-400">
                     ไม่พบรายการจองตามเงื่อนไขที่เลือก
                   </td>
                 </tr>
               ) : (
-                currentReservations.map((item) => (
+                currentReservations.map((item, index) => (
                   <tr key={item.id} className="group transition-colors hover:bg-blue-50/30">
+                    <td className="px-4 py-4 text-center font-bold text-slate-500 text-xs">
+                      {(activePage - 1) * itemsPerPage + index + 1}
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 font-extrabold text-sm text-white shadow-xs">
@@ -1923,6 +1927,7 @@ export const ReportsPage: React.FC = () => {
           <table className="min-w-[1100px] w-full text-sm">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
+                <th className="px-4 py-3 text-center font-semibold w-16">ลำดับ</th>
                 <th className="px-4 py-3 text-left font-semibold">วันที่/เวลา</th>
                 <th className="px-4 py-3 text-left font-semibold">ประเภท</th>
                 <th className="px-4 py-3 text-left font-semibold">รายละเอียด</th>
@@ -1935,21 +1940,24 @@ export const ReportsPage: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
                     กำลังโหลดรายการแจ้งปัญหา...
                   </td>
                 </tr>
               ) : filteredReports.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
                     ไม่พบรายการแจ้งปัญหาตามเงื่อนไขที่เลือก
                   </td>
                 </tr>
-              ) : paginatedReports.map((report) => {
+              ) : paginatedReports.map((report, index) => {
                 const typeMeta = getTypeMeta(report.type);
                 const statusMeta = getStatusMeta(report.status);
                 return (
                   <tr key={report.id} className="border-t border-slate-200 bg-white">
+                    <td className="px-4 py-3 text-center font-bold text-slate-500 text-xs">
+                      {(Math.min(currentPage, totalPages) - 1) * itemsPerPage + index + 1}
+                    </td>
                     <td className="px-4 py-3 text-slate-700">
                       <div className="font-medium">{report.date}</div>
                       <div className="text-slate-500">{report.time}</div>
@@ -3583,6 +3591,7 @@ export const AnnouncementsPage: React.FC = () => {
             <table className="min-w-[950px] w-full text-sm">
               <thead className="bg-slate-100 text-slate-600">
                 <tr>
+                  <th className="px-4 py-3.5 text-center font-semibold w-16">ลำดับ</th>
                   <th className="px-5 py-3.5 text-left font-semibold">ช่วงเวลาประกาศ</th>
                   <th className="px-5 py-3.5 text-left font-semibold">หัวข้อและรายละเอียด</th>
                   <th className="px-5 py-3.5 text-left font-semibold">หมวดหมู่</th>
@@ -3592,11 +3601,14 @@ export const AnnouncementsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {paginatedAnnouncements.map((item) => {
+                {paginatedAnnouncements.map((item, index) => {
                   const categoryMeta = getCategoryMeta(item.category);
                   const statusMeta = getStatusMeta(item);
                   return (
                     <tr key={item.id} className="transition-colors hover:bg-slate-50/60">
+                      <td className="px-4 py-3 text-center font-bold text-slate-500 text-xs">
+                        {(Math.min(currentPage, totalPages) - 1) * itemsPerPage + index + 1}
+                      </td>
                       <td className="px-5 py-3 whitespace-nowrap text-xs text-slate-600">
                         <div className="flex items-center gap-1.5 font-medium">
                           <CalendarDays className="h-3.5 w-3.5 text-slate-400" />

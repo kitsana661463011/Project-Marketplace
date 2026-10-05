@@ -13,6 +13,7 @@ export interface ChartDataItem {
   label: string;
   value: number;
   percentage: number;
+  originalPercentage?: number;
   color?: string;
   subItems?: string[];
   subItemDetails?: ChartSubItem[];
@@ -72,33 +73,52 @@ interface HighVolumeChartProps {
  */
 export const ModernAnalyticsChart: React.FC<HighVolumeChartProps> = ({
   data,
-  totalCount: _totalCount,
+  totalCount,
   unit,
   centerLabel,
   viewMode = 'donut',
-  maxDisplay: _maxDisplay,
+  maxDisplay = 5,
 }) => {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
 
-  // กรองเฉพาะหมวดหมู่ที่มีคนเลือกจริง (> 0) ตามคำขอของผู้ใช้ (ถ้ายังไม่มี 0 ไม่ต้องแสดง)
-  const allRankedData: ChartDataItem[] = React.useMemo(() => {
+  // เตรียมข้อมูลเฉพาะ Top N (อันดับ 1 ถึง maxDisplay โดยปรับสัดส่วนให้เต็ม 100% พอดี)
+  const processedData: ChartDataItem[] = React.useMemo(() => {
     if (!data || data.length === 0) return [];
-    return [...data]
-      .filter((d) => (d.value || 0) > 0)
-      .sort((a, b) => b.value - a.value)
-      .map((item, idx) => ({
-        ...item,
-        color: item.color || MODERN_PALETTE[idx % MODERN_PALETTE.length],
-      }));
-  }, [data]);
 
-  const activeItem = hoveredIdx !== null ? allRankedData[hoveredIdx] : null;
+    // กรองเฉพาะหมวดหมู่ที่มีคนเลือกจริง (> 0)
+    const valid = data.filter((d) => (d.value || 0) > 0);
+    if (valid.length === 0) return [];
 
-  // คำนวณ Donut Slices สำหรับทุกหมวดหมู่ที่มีคนเลือก
+    // เรียงตามค่าจากมากไปน้อย
+    const sorted = [...valid].sort((a, b) => b.value - a.value);
+
+    // แสดงเฉพาะ Top N (ไม่ต้องมีกลุ่ม "อื่นๆ" หรือสีเทา)
+    const topItems = sorted.slice(0, maxDisplay);
+    const topTotalValue = topItems.reduce((acc, curr) => acc + (curr.value || 0), 0);
+
+    return topItems.map((item, idx) => ({
+      ...item,
+      originalPercentage: item.percentage,
+      percentage: topTotalValue > 0 ? Number(((item.value / topTotalValue) * 100).toFixed(1)) : 0,
+      color: item.color || MODERN_PALETTE[idx % MODERN_PALETTE.length],
+    }));
+  }, [data, maxDisplay]);
+
+  // Donut slices: ชิ้นที่มี value > 0 (เฉพาะ Top 5)
+  const validData = React.useMemo(() => {
+    return processedData.filter((d) => d.value > 0);
+  }, [processedData]);
+
+  const activeItem = hoveredIdx !== null ? validData[hoveredIdx] : null;
+
+  // คำนวณ Donut Slices ให้เต็มวง 360° พอดี
   const radius = 52;
   const circumference = 2 * Math.PI * radius; // ~326.7
-  let accumulatedPercent = 0;
+  const topTotalValue = React.useMemo(() => {
+    return validData.reduce((sum, item) => sum + (item.value || 0), 0);
+  }, [validData]);
+  let accumulatedRatio = 0;
 
   const handleMouseMove = (e: React.MouseEvent) => {
     setTooltipPos({
@@ -107,7 +127,7 @@ export const ModernAnalyticsChart: React.FC<HighVolumeChartProps> = ({
     });
   };
 
-  if (allRankedData.length === 0) {
+  if (processedData.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-xs font-semibold text-slate-400">
         ไม่มีข้อมูล
@@ -125,7 +145,7 @@ export const ModernAnalyticsChart: React.FC<HighVolumeChartProps> = ({
       }}
     >
       {viewMode === 'donut' ? (
-        /* ──── Donut Chart View (แสดงทุกหมวดหมู่ที่มีคนเลือก สดใสทุกชิ้น) ──── */
+        /* ──── Donut Chart View (Top 5 สดใส สวยงาม เต็มวง 100%) ──── */
         <div className="flex items-center justify-between gap-3">
           {/* Donut Chart SVG */}
           <div className="relative flex items-center justify-center shrink-0 w-[130px] h-[130px]">
@@ -143,10 +163,11 @@ export const ModernAnalyticsChart: React.FC<HighVolumeChartProps> = ({
                 stroke="#f1f5f9"
                 strokeWidth="18"
               />
-              {allRankedData.map((item, index) => {
-                const strokeDash = (item.percentage / 100) * circumference;
-                const strokeOffset = -((accumulatedPercent / 100) * circumference);
-                accumulatedPercent += item.percentage;
+              {validData.map((item, index) => {
+                const ratio = topTotalValue > 0 ? (item.value || 0) / topTotalValue : 0;
+                const strokeDash = ratio * circumference;
+                const strokeOffset = -(accumulatedRatio * circumference);
+                accumulatedRatio += ratio;
                 const isHovered = hoveredIdx === index;
                 const isDimmed = hoveredIdx !== null && !isHovered;
 
@@ -190,7 +211,7 @@ export const ModernAnalyticsChart: React.FC<HighVolumeChartProps> = ({
               ) : (
                 <>
                   <span className="text-xl font-black text-slate-900 tracking-tight leading-none">
-                    {allRankedData.length}
+                    {totalCount ?? validData.length}
                   </span>
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
                     {centerLabel}
@@ -200,9 +221,9 @@ export const ModernAnalyticsChart: React.FC<HighVolumeChartProps> = ({
             </div>
           </div>
 
-          {/* Compact Side Legend - เลื่อนดูได้ราบรื่น ครบทุกหมวดที่มีคนเลือก */}
-          <div className="flex-1 min-w-0 max-h-[210px] overflow-y-auto pr-1.5 custom-scrollbar space-y-1">
-            {allRankedData.map((item, idx) => {
+          {/* Compact Side Legend - แสดง Top 5 อันดับแรก ไม่ต้องเลื่อนสกอร์บาร์ */}
+          <div className="flex-1 min-w-0 space-y-1.5">
+            {processedData.slice(0, maxDisplay).map((item, idx) => {
               const isHovered = hoveredIdx === idx;
               const isDimmed = hoveredIdx !== null && !isHovered;
               return (
@@ -231,11 +252,11 @@ export const ModernAnalyticsChart: React.FC<HighVolumeChartProps> = ({
                     >
                       {item.label}
                     </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] text-slate-400 font-semibold font-mono">
+                    <span className="text-[10px] text-slate-400 font-semibold font-mono shrink-0">
                       ({item.value})
                     </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <span
                       className={`text-[11px] font-black rounded-md px-1.5 py-0.5 ${
                         isHovered
@@ -252,9 +273,9 @@ export const ModernAnalyticsChart: React.FC<HighVolumeChartProps> = ({
           </div>
         </div>
       ) : (
-        /* ──── Horizontal Ranking Bar Chart View (แสดงรายการทั้งหมดแบบจัดอันดับ) ──── */
+        /* ──── Horizontal Ranking Bar Chart View (แสดงรายการจัดอันดับ) ──── */
         <div className="max-h-[225px] overflow-y-auto pr-1 custom-scrollbar space-y-2 py-0.5">
-          {allRankedData.map((item, idx) => {
+          {processedData.map((item, idx) => {
             const isHovered = hoveredIdx === idx;
             const isDimmed = hoveredIdx !== null && !isHovered;
             const isTopRank = idx < 3;
@@ -345,10 +366,33 @@ export const ModernAnalyticsChart: React.FC<HighVolumeChartProps> = ({
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4 text-slate-200">
-                <span className="text-[11px] font-medium text-slate-300">สัดส่วน:</span>
+                <span className="text-[11px] font-medium text-slate-300">สัดส่วนใน Top 5:</span>
                 <span className="font-black text-amber-400 text-xs">{activeItem.percentage}%</span>
               </div>
+              {activeItem.originalPercentage !== undefined && (
+                <div className="flex items-center justify-between gap-4 text-slate-200">
+                  <span className="text-[11px] font-medium text-slate-300">สัดส่วนจากทั้งหมด:</span>
+                  <span className="font-black text-slate-300 text-xs">{activeItem.originalPercentage}%</span>
+                </div>
+              )}
             </div>
+
+            {activeItem.subItems && activeItem.subItems.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-slate-700/80 space-y-1">
+                <div className="flex items-center gap-1.5 text-sky-400 font-extrabold text-[11px]">
+                  <span>📋</span>
+                  <span>{centerLabel === 'ความสนใจ' ? 'ตัวเลือกในกลุ่มนี้:' : 'หมวดหมู่ในกลุ่มนี้:'}</span>
+                </div>
+                <div className="rounded-xl bg-slate-800/90 border border-slate-700/70 p-2 shadow-inner">
+                  <p className="text-[11px] leading-relaxed text-slate-100 font-medium">
+                    {activeItem.subItems.slice(0, 5).join(', ')}
+                    {activeItem.subItems.length > 5 ? (
+                      <span className="text-sky-300 font-bold"> และอีก {activeItem.subItems.length - 5} รายการ</span>
+                    ) : ''}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>,
           document.body
         )}
@@ -450,10 +494,10 @@ export const ZoneOccupancyChart: React.FC<{
             </svg>
 
             {/* Center Hub */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-1">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-1.5 transition-all duration-200">
               {hoveredIdx !== null ? (
                 <>
-                  <span className="text-[10px] font-black text-slate-800">
+                  <span className="text-[10px] font-black text-slate-800 truncate max-w-[78px]">
                     {donutData[hoveredIdx].label}
                   </span>
                   <span className="text-base font-black text-blue-600 leading-tight">
@@ -465,10 +509,10 @@ export const ZoneOccupancyChart: React.FC<{
                 </>
               ) : (
                 <>
-                  <span className="text-lg font-black text-slate-900 leading-none">
+                  <span className="text-xl font-black text-slate-900 tracking-tight leading-none">
                     {totalStalls}
                   </span>
-                  <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider mt-0.5">
+                  <span className="text-[10px] font-extrabold text-slate-400 mt-0.5">
                     แผงทั้งหมด
                   </span>
                 </>
@@ -533,7 +577,7 @@ export const ZoneOccupancyChart: React.FC<{
                       }}
                       className="group cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 shadow-2xs hover:border-blue-400 hover:text-blue-600 transition flex items-center gap-1"
                     >
-                      <span className="truncate max-w-[70px]">{zone.zone_name}</span>
+                      <span className="truncate max-w-[100px]">{zone.zone_name}</span>
                       <span className="font-black text-blue-600">{zOccPct}%</span>
                     </div>
                   );
